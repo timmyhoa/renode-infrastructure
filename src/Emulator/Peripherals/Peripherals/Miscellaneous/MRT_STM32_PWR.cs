@@ -16,9 +16,9 @@ using Antmicro.Renode.Utilities;
 namespace Antmicro.Renode.Peripherals.Miscellaneous
 {
     [AllowedTranslations(AllowedTranslation.ByteToDoubleWord | AllowedTranslation.WordToDoubleWord)]
-    public sealed class STM32_PWR : BasicDoubleWordPeripheral, IKnownSize
+    public sealed class MRT_STM32_PWR : BasicDoubleWordPeripheral, IKnownSize
     {
-        public STM32_PWR(IMachine machine) : base(machine)
+        public MRT_STM32_PWR(IMachine machine) : base(machine)
         {
             DefineRegisters();
         }
