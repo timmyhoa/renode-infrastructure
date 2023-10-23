@@ -481,6 +481,7 @@
     <Compile Include="Peripherals\SPI\NORFlash\DecodedOperation.cs" />
     <Compile Include="Peripherals\SPI\GigaDevice_GD25LQ.cs" />
     <Compile Include="Peripherals\Miscellaneous\STM32_PWR.cs" />
+    <Compile Include="Peripherals\Miscellaneous\MRT_STM32_PWR.cs" />
     <Compile Include="Peripherals\Timers\S32K_LPIT.cs" />
     <Compile Include="Peripherals\Timers\S32K_LPTMR.cs" />
     <Compile Include="Peripherals\UART\TrivialUart.cs" />
@@ -530,6 +531,7 @@
     <Compile Include="Peripherals\Miscellaneous\SiLabs\EFR32xG12DeviceInformation.cs" />
     <Compile Include="Peripherals\Miscellaneous\STM32L0_RCC.cs" />
     <Compile Include="Peripherals\Sensors\LSM6DSO_IMU.cs" />
+    <Compile Include="Peripherals\Sensors\MRT_LSM6DSO_IMU.cs" />
     <Compile Include="Peripherals\SPI\OpenTitan_SpiHost.cs" />
     <Compile Include="Peripherals\SPI\OpenTitan_SpiDevice.cs" />
     <Compile Include="Peripherals\SPI\Cadence_SPI.cs" />
