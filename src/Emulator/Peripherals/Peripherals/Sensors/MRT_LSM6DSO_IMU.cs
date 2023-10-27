@@ -166,9 +166,10 @@ namespace Antmicro.Renode.Peripherals.Sensors
         
         public byte[] Read(int count = 1) 
         {
-            byte [] ret = new byte [] {RegistersCollection.Read(address)};
+            var ret = RegistersCollection.Read(address);
+            this.NoisyLog("Reading register {1} (0x{1:X}) from device: 0x{0:X}", ret, (Registers)address);
             TryIncrementAddress();
-            return ret;
+            return new byte [] {ret};
         }
 
         public bool FifoOverrunStatus => commonFifo.OverrunOccurred;
@@ -313,7 +314,14 @@ namespace Antmicro.Renode.Peripherals.Sensors
                 .WithTaggedFlag("HP_REF_MODE_XL", 4)
                 .WithTag("HPCF_XL", 5, 3)
                 ;
-
+            
+            Registers.Status.Define(this)
+                .WithValueField(2, 1, FieldMode.Read, valueProviderCallback: _ => 0x1, name: "TDA")
+                .WithValueField(1, 1, FieldMode.Read, valueProviderCallback: _ => 0x1, name: "GDA")
+                .WithValueField(0, 1, FieldMode.Read, valueProviderCallback: _ => 0x1, name: "XLDA")
+                .WithValueField(3, 5, FieldMode.Read)
+                ;
+            
             Registers.TemperatureLow.Define(this)
                 .WithValueField(0, 8, FieldMode.Read, name: "OUT_TEMP_L", valueProviderCallback: _ =>
                 {

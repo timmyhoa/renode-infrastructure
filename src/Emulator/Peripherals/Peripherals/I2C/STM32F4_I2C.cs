@@ -254,6 +254,7 @@ namespace Antmicro.Renode.Peripherals.I2C
             state = State.Idle;
             byteTransferFinished.Value = false;
             dataRegisterEmpty.Value = false;
+            selectedSlave?.FinishTransmission();
             Update();
         }
 
