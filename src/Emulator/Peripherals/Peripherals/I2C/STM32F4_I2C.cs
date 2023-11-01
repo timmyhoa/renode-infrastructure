@@ -13,7 +13,6 @@ using Antmicro.Renode.Peripherals.Bus;
 using System.Collections.Generic;
 using System.Linq;
 using Antmicro.Renode.Core.Structure.Registers;
-using Antmicro.Renode.Utilities;
 
 namespace Antmicro.Renode.Peripherals.I2C
 {
@@ -57,11 +56,14 @@ namespace Antmicro.Renode.Peripherals.I2C
 
         public uint ReadDoubleWord(long offset)
         {
-            return registers.Read(offset);
+            var ret = registers.Read(offset);
+            lastReadRegister = (Registers) offset;
+            return ret;
         }
 
         public void WriteDoubleWord(long offset, uint value)
         {
+            lastReadRegister = Registers.Control1;
             registers.Write(offset, value);
         }
 
@@ -102,9 +104,31 @@ namespace Antmicro.Renode.Peripherals.I2C
             var control2 = new DoubleWordRegister(this).WithValueField(0, 6, name:"Freq");
             var status1 = new DoubleWordRegister(this);
             var status2 = new DoubleWordRegister(this);
+            status2.DefineReadCallback(readCallback: (_, __) => {
+                if (lastReadRegister != Registers.Status1) {
+                    return;
+                }
+                this.DebugLog("This works");
+
+                if (!masterSlave.Value || !willReadOnSelectedSlave){
+                    return;
+                }
+                
+                if (acknowledgeEnable.Value) {
+                    dataToReceive.Enqueue(selectedSlave.Read()[0]);
+                }
+                dataToReceive.Enqueue(selectedSlave.Read()[0]);
+                return;
+            });
             data = new DoubleWordRegister(this);
 
-            acknowledgeEnable = control1.DefineFlagField(10);
+            acknowledgeEnable = control1.DefineFlagField(10, changeCallback: (_, newVal) => {
+                if (newVal) {
+                    nextByteAck = ACKStatus.Enabled;
+                    return;
+                } 
+                nextByteAck = ACKStatus.DisableNextRead;
+            });
 
             bufferInterruptEnable = control2.DefineFlagField(10, changeCallback: InterruptEnableChange);
             eventInterruptEnable = control2.DefineFlagField(9, changeCallback: InterruptEnableChange);
@@ -156,9 +180,15 @@ namespace Antmicro.Renode.Peripherals.I2C
         private uint DataRead(uint oldValue)
         {
             var result = 0u;
-            if(dataToReceive != null && dataToReceive.Any())
+            if(dataToReceive.Any())
             {
                 result = dataToReceive.Dequeue();
+                if (!stopped && nextByteAck != ACKStatus.Disabled){
+                    if (nextByteAck == ACKStatus.DisableNextRead) {
+                        nextByteAck = ACKStatus.Disabled;
+                    } 
+                    dataToReceive.Enqueue(selectedSlave.Read()[0]);
+                }
             }
             else
             {
@@ -190,12 +220,7 @@ namespace Antmicro.Renode.Peripherals.I2C
 
                     transmitterReceiver.Value = !willReadOnSelectedSlave; //true when transmitting
 
-                    if(willReadOnSelectedSlave)
-                    {
-                        dataToReceive = new Queue<byte>(selectedSlave.Read());
-                        byteTransferFinished.Value = true;
-                    }
-                    else
+                    if (!willReadOnSelectedSlave)
                     {
                         state = State.AwaitingData;
                         dataToTransfer = new List<byte>();
@@ -238,6 +263,7 @@ namespace Antmicro.Renode.Peripherals.I2C
         private void StopWrite(bool oldValue, bool newValue)
         {
             this.NoisyLog("Setting STOP bit to {0}", newValue);
+            stopped = newValue;
             if(!newValue)
             {
                 return;
@@ -247,11 +273,11 @@ namespace Antmicro.Renode.Peripherals.I2C
             {
                 selectedSlave.Write(dataToTransfer.ToArray());
                 dataToTransfer.Clear();
-                state = State.Idle;
                 Update();
             }
 
             state = State.Idle;
+            lastReadRegister = Registers.Control1;
             byteTransferFinished.Value = false;
             dataRegisterEmpty.Value = false;
             selectedSlave?.FinishTransmission();
@@ -307,6 +333,15 @@ namespace Antmicro.Renode.Peripherals.I2C
 
         private DoubleWordRegister data;
         private IFlagRegisterField acknowledgeEnable;
+        private Registers lastReadRegister;
+        private ACKStatus nextByteAck;
+        private enum ACKStatus {
+            Enabled,
+            DisableNextRead,
+            Disabled,
+
+        }
+        private bool stopped;
         private IFlagRegisterField bufferInterruptEnable, eventInterruptEnable, errorInterruptEnable;
         private IValueRegisterField dataRegister;
         private IFlagRegisterField acknowledgeFailed, dataRegisterEmpty, dataRegisterNotEmpty, byteTransferFinished, addressSentOrMatched, startBit;
@@ -316,7 +351,7 @@ namespace Antmicro.Renode.Peripherals.I2C
 
         private State state;
         private List<byte> dataToTransfer;
-        private Queue<byte> dataToReceive;
+        private readonly Queue<byte> dataToReceive = new Queue<byte> {};
         private bool willReadOnSelectedSlave;
         private II2CPeripheral selectedSlave;
 
