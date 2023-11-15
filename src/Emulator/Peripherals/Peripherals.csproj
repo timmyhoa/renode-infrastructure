@@ -68,6 +68,8 @@
     <Compile Include="Peripherals\MTD\CFIFlash.cs" />
     <Compile Include="Peripherals\UART\NS16550.cs" />
     <Compile Include="Peripherals\UART\NPCX_UART.cs" />
+    <Compile Include="Peripherals\Timers\NPCX_MTC.cs" />
+    <Compile Include="Peripherals\Timers\NPCX_TWD.cs" />
     <Compile Include="Peripherals\UART\AxiUartLite.cs" />
     <Compile Include="Peripherals\Input\AntMouse.cs" />
     <Compile Include="Peripherals\MTD\CFIFlashExtensions.cs" />
@@ -97,6 +99,7 @@
     <Compile Include="Peripherals\DMA\STM32DMA.cs" />
     <Compile Include="Peripherals\DMA\UDMA.cs" />
     <Compile Include="Peripherals\DMA\MPFS_PDMA.cs" />
+    <Compile Include="Peripherals\DMA\NPCX_MDMA.cs" />
     <Compile Include="Peripherals\DMA\STM32LDMA.cs" />
     <Compile Include="Peripherals\Miscellaneous\ArmSysCtl.cs" />
     <Compile Include="Peripherals\DMA\OmapDma.cs" />
@@ -168,6 +171,8 @@
     <Compile Include="Peripherals\USBDeprecated\USBPacket.cs" />
     <Compile Include="Peripherals\CAN\STMCAN.cs" />
     <Compile Include="Peripherals\CAN\MPFS_CAN.cs" />
+    <Compile Include="Peripherals\CAN\MCAN.cs" />
+    <Compile Include="Peripherals\CAN\MCAN_Structures.cs" />
     <Compile Include="Peripherals\USBDeprecated\EHCIHostController.cs" />
     <Compile Include="Peripherals\Timers\TegraUsecTimer.cs" />
     <Compile Include="Peripherals\I2C\TegraI2CController.cs" />
@@ -326,7 +331,9 @@
     <Compile Include="Peripherals\GPIOPort\MPFS_GPIO.cs" />
     <Compile Include="Peripherals\MTD\MPFS_eNVM.cs" />
     <Compile Include="Peripherals\SPI\MPFS_SPI.cs" />
+    <Compile Include="Peripherals\SPI\NPCX_SPIP.cs" />
     <Compile Include="Peripherals\Timers\MPFS_Timer.cs" />
+    <Compile Include="Peripherals\Timers\NPCX_ITIM32.cs" />
     <Compile Include="Peripherals\I2C\MPFS_I2C.cs" />
     <Compile Include="Peripherals\USB\USBMouse.cs" />
     <Compile Include="Peripherals\Miscellaneous\STM32F4_RNG.cs" />
@@ -453,6 +460,8 @@
     <Compile Include="Peripherals\Analog\IMXRT_ADC.cs" />
     <Compile Include="Peripherals\Timers\IMXRT_PWM.cs" />
     <Compile Include="Peripherals\Miscellaneous\MPFS_SystemServices.cs" />
+    <Compile Include="Peripherals\Miscellaneous\NPCX_LFCG.cs" />
+    <Compile Include="Peripherals\Miscellaneous\NPCX_HFCG.cs" />
     <Compile Include="Peripherals\Timers\NRF52840_Watchdog.cs" />
     <Compile Include="Peripherals\Timers\AmbiqApollo4_Watchdog.cs" />
     <Compile Include="Peripherals\Storage\VirtIOBlockDevice.cs" />
@@ -587,6 +596,10 @@
     <Compile Include="Peripherals\I2C\EFR32xG2_I2CController.cs" />
     <Compile Include="Peripherals\Miscellaneous\STM32WBA_RCC.cs" />
     <Compile Include="Peripherals\Timers\EFR32xG2_BURTC.cs" />
+    <Compile Include="Peripherals\I2C\SHT45.cs" />
+    <Compile Include="Peripherals\I2C\BME280.cs" />
+    <Compile Include="Peripherals\I2C\MB85RC1MT.cs" />
+    <Compile Include="Peripherals\Miscellaneous\Zynq7000_SystemLevelControlRegisters.cs" />
   </ItemGroup>
   <Import Project="$(MSBuildBinPath)\Microsoft.CSharp.targets" />
   <ProjectExtensions>

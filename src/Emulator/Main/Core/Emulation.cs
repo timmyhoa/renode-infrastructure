@@ -22,7 +22,7 @@ using System.Threading;
 
 namespace Antmicro.Renode.Core
 {
-    public class Emulation : IInterestingType, IDisposable
+    public class Emulation : IDisposable
     {
         public Emulation()
         {
@@ -572,6 +572,7 @@ namespace Antmicro.Renode.Core
                 machs.Dispose();
                 HostMachine.Dispose();
                 CurrentLogger.Dispose();
+                FileFetcher.Dispose();
             }
         }
 

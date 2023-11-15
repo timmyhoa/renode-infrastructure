@@ -11,10 +11,11 @@ using Antmicro.Renode.Peripherals;
 using Antmicro.Renode.Utilities;
 using Antmicro.Renode.Logging;
 using System.Collections.Generic;
+using Antmicro.Renode.Peripherals.CPU;
 
 namespace Antmicro.Renode.Peripherals.Memory
 {
-    public class ArrayMemory : IBytePeripheral, IWordPeripheral, IDoubleWordPeripheral, IKnownSize, IMemory, IMultibyteWritePeripheral, IQuadWordPeripheral
+    public class ArrayMemory : IBytePeripheral, IWordPeripheral, IDoubleWordPeripheral, IKnownSize, IMemory, IMultibyteWritePeripheral, IQuadWordPeripheral, ICanLoadFiles
     {
         public ArrayMemory(byte[] source)
         {
@@ -84,16 +85,21 @@ namespace Antmicro.Renode.Peripherals.Memory
             array[intOffset] = value;
         }
 
-        public byte[] ReadBytes(long offset, int count)
+        public byte[] ReadBytes(long offset, int count, ICPU context = null)
         {
             var result = new byte[count];
             Array.Copy(array, offset, result, 0, count);
             return result;
         }
 
-        public void WriteBytes(long offset, byte[] bytes, int startingIndex, int count)
+        public void WriteBytes(long offset, byte[] bytes, int startingIndex, int count, ICPU context = null)
         {
             Array.Copy(bytes, startingIndex, array, offset, count);
+        }
+
+        public void LoadFileChunks(string path, IEnumerable<FileChunk> chunks, ICPU cpu)
+        {
+            this.LoadFileChunks(chunks, cpu);
         }
 
         public long Size

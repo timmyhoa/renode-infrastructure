@@ -238,6 +238,7 @@ namespace Antmicro.Renode.UserInterface
             Commands.Add(new ExecuteCommand(this, "execute", "VARIABLE", x => ExpandVariable(x, variables), () => variables.Keys));
             Commands.Add(new ExecuteCommand(this, "runMacro", "MACRO", x => ExpandVariable(x, macros), () => macros.Keys));
             Commands.Add(new MachCommand(this, () => currentMachine, x => currentMachine = x));
+            Commands.Add(new ResdCommand(this));
             Commands.Add(new VerboseCommand(this, x => verboseMode = x));
         }
 
@@ -530,8 +531,12 @@ namespace Antmicro.Renode.UserInterface
             return variableName;
         }
 
-        private bool TryCompilePlugin(string filename, ICommandInteraction writer)
+        public bool TryCompilePlugin(string filename, ICommandInteraction writer = null)
         {
+            if(writer == null)
+            {
+                writer = Interaction;
+            }
             string sha; 
             using(var shaComputer = SHA256.Create())
             {

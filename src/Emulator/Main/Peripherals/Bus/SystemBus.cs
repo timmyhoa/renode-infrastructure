@@ -21,6 +21,7 @@ using System.Collections.ObjectModel;
 using System.Text;
 using Machine = Antmicro.Renode.Core.Machine;
 using Antmicro.Migrant;
+using Antmicro.Migrant.Hooks;
 using ELFSharp.ELF;
 using ELFSharp.ELF.Segments;
 using ELFSharp.UImage;
@@ -56,15 +57,7 @@ namespace Antmicro.Renode.Peripherals.Bus
 
         public void LoadFileChunks(string path, IEnumerable<FileChunk> chunks, ICPU cpu)
         {
-            ulong minAddr = ulong.MaxValue;
-
-            foreach(FileChunk chunk in chunks)
-            {
-                var chunkData = chunk.Data.ToArray();
-                WriteBytes(chunkData, chunk.OffsetToLoad, chunkData.Length, context: cpu);
-                minAddr = Math.Min(minAddr, chunk.OffsetToLoad);
-            }
-
+            var minAddr = this.LoadFileChunks(chunks, cpu);
             AddFingerprint(path);
             UpdateLowestLoadedAddress(minAddr);
             this.DebugLog(path + " File loaded.");
@@ -106,7 +99,7 @@ namespace Antmicro.Renode.Peripherals.Bus
             FillAccessMethodsWithTaggedMethods(peripheral, registrationPoint.ConnectionRegionName, ref methods);
             RegisterInner(peripheral, methods, registrationPoint, context: registrationPoint.CPU);
         }
-        
+
         void IPeripheralRegister<IBusPeripheral, BusMultiRegistration>.Unregister(IBusPeripheral peripheral)
         {
             Unregister(peripheral);
@@ -278,6 +271,11 @@ namespace Antmicro.Renode.Peripherals.Bus
 
         private bool TryGetCurrentCPUId(out int cpuId)
         {
+            if(threadLocalContext.InUse)
+            {
+                cpuId = threadLocalContext.CPUId;
+                return true;
+            }
             /*
              * Because getting cpu id can possibly be a heavy operation, we cache the
              * obtained ID in the thread local storage. Note that we assume here that the
@@ -351,6 +349,7 @@ namespace Antmicro.Renode.Peripherals.Bus
         public void Dispose()
         {
             cachedCpuId.Dispose();
+            threadLocalContext.Dispose();
             #if DEBUG
             foreach(var peripherals in allPeripherals)
             {
@@ -376,7 +375,7 @@ namespace Antmicro.Renode.Peripherals.Bus
         {
             return GetPeripheralsForContext(context).FirstOrDefault(x => x.RegistrationPoint.Range.Contains(address));
         }
-        
+
         public IPeripheral WhatPeripheralIsAt(ulong address, ICPU context = null)
         {
             var registered = WhatIsAt(address, context);
@@ -410,26 +409,29 @@ namespace Antmicro.Renode.Peripherals.Bus
 
         public void ReadBytes(ulong address, int count, byte[] destination, int startIndex, bool onlyMemory = false, ICPU context = null)
         {
-            var targets = FindTargets(address, checked((ulong)count), context);
-            if(onlyMemory)
+            using(SetLocalContext(context))
             {
-                ThrowIfNotAllMemory(targets);
-            }
-            foreach(var target in targets)
-            {
-                var memory = target.What.Peripheral as MappedMemory;
-                if(memory != null)
+                var targets = FindTargets(address, checked((ulong)count), context);
+                if(onlyMemory)
                 {
-                    checked
-                    {
-                        memory.ReadBytes(checked((long)(target.Offset - target.What.RegistrationPoint.Range.StartAddress + target.What.RegistrationPoint.Offset)), (int)target.SourceLength, destination, startIndex + (int)target.SourceIndex);
-                    }
+                    ThrowIfNotAllMemory(targets);
                 }
-                else
+                foreach(var target in targets)
                 {
-                    for(var i = 0UL; i < target.SourceLength; ++i)
+                    var memory = target.What.Peripheral as MappedMemory;
+                    if(memory != null)
                     {
-                        destination[checked((ulong)startIndex) + target.SourceIndex + i] = ReadByte(target.Offset + i, context);
+                        checked
+                        {
+                            memory.ReadBytes(checked((long)(target.Offset - target.What.RegistrationPoint.Range.StartAddress + target.What.RegistrationPoint.Offset)), (int)target.SourceLength, destination, startIndex + (int)target.SourceIndex);
+                        }
+                    }
+                    else
+                    {
+                        for(var i = 0UL; i < target.SourceLength; ++i)
+                        {
+                            destination[checked((ulong)startIndex) + target.SourceIndex + i] = ReadByte(target.Offset + i, context);
+                        }
                     }
                 }
             }
@@ -442,6 +444,11 @@ namespace Antmicro.Renode.Peripherals.Bus
             return result;
         }
 
+        public byte[] ReadBytes(long offset, int count, ICPU context = null)
+        {
+            return ReadBytes((ulong)offset, count, context: context);
+        }
+
         public void WriteBytes(byte[] bytes, ulong address, bool onlyMemory = false, ICPU context = null)
         {
             WriteBytes(bytes, address, bytes.Length, onlyMemory, context);
@@ -449,26 +456,29 @@ namespace Antmicro.Renode.Peripherals.Bus
 
         public void WriteBytes(byte[] bytes, ulong address, int startingIndex, long count, bool onlyMemory = false, ICPU context = null)
         {
-            var targets = FindTargets(address, checked((ulong)count), context);
-            if(onlyMemory)
+            using(SetLocalContext(context))
             {
-                ThrowIfNotAllMemory(targets);
-            }
-            foreach(var target in targets)
-            {
-                var multibytePeripheral = target.What.Peripheral as IMultibyteWritePeripheral;
-                if(multibytePeripheral != null)
+                var targets = FindTargets(address, checked((ulong)count), context);
+                if(onlyMemory)
                 {
-                    checked
-                    {
-                        multibytePeripheral.WriteBytes(checked((long)(target.Offset - target.What.RegistrationPoint.Range.StartAddress + target.What.RegistrationPoint.Offset)), bytes, startingIndex + (int)target.SourceIndex, (int)target.SourceLength);
-                    }
+                    ThrowIfNotAllMemory(targets);
                 }
-                else
+                foreach(var target in targets)
                 {
-                    for(var i = 0UL; i < target.SourceLength; ++i)
+                    var multibytePeripheral = target.What.Peripheral as IMultibyteWritePeripheral;
+                    if(multibytePeripheral != null)
                     {
-                        WriteByte(target.Offset + i, bytes[target.SourceIndex + i]);
+                        checked
+                        {
+                            multibytePeripheral.WriteBytes(checked((long)(target.Offset - target.What.RegistrationPoint.Range.StartAddress + target.What.RegistrationPoint.Offset)), bytes, startingIndex + (int)target.SourceIndex, (int)target.SourceLength);
+                        }
+                    }
+                    else
+                    {
+                        for(var i = 0UL; i < target.SourceLength; ++i)
+                        {
+                            WriteByte(target.Offset + i, bytes[target.SourceIndex + (ulong)startingIndex + i]);
+                        }
                     }
                 }
             }
@@ -477,6 +487,11 @@ namespace Antmicro.Renode.Peripherals.Bus
         public void WriteBytes(byte[] bytes, ulong address, long count, bool onlyMemory = false, ICPU context = null)
         {
             WriteBytes(bytes, address, 0, count, onlyMemory, context);
+        }
+
+        public void WriteBytes(long offset, byte[] array, int startingIndex, int count, ICPU context = null)
+        {
+            WriteBytes(array, (ulong)offset, startingIndex, count, context: context);
         }
 
         public void ZeroRange(Range range, ICPU context = null)
@@ -622,14 +637,20 @@ namespace Antmicro.Renode.Peripherals.Bus
             return new BinaryFingerprint(fileName);
         }
 
-         public IEnumerable<ulong> GetAllSymbolAddresses(string symbolName)
-         {
-             IReadOnlyCollection<Symbol> symbols;
-             if(!Lookup.TryGetSymbolsByName(symbolName, out symbols))
-             {
-                 throw new RecoverableException(string.Format("No symbol with name `{0}` found.", symbolName));
-             }
-            return symbols.Select(symbol => symbol.Start.RawValue);
+        public bool TryGetAllSymbolAddresses(string symbolName, out IEnumerable<ulong> symbolAddresses)
+        {
+            var result = Lookup.TryGetSymbolsByName(symbolName, out var symbols);
+            symbolAddresses = symbols.Select(symbol => symbol.Start.RawValue);
+            return result;
+        }
+
+        public IEnumerable<ulong> GetAllSymbolAddresses(string symbolName)
+        {
+            if(!TryGetAllSymbolAddresses(symbolName, out var symbolAddresses))
+            {
+                throw new RecoverableException(string.Format("No symbol with name `{0}` found.", symbolName));
+            }
+            return symbolAddresses;
         }
 
         public ulong GetSymbolAddress(string symbolName)
@@ -1023,7 +1044,7 @@ namespace Antmicro.Renode.Peripherals.Bus
                 mappingsForPeripheral.Remove(peripheral);
             }
 
-            // remove the peripheral from all cpu-local and the global mappings 
+            // remove the peripheral from all cpu-local and the global mappings
             foreach(var context in cpuLocalPeripherals.Keys.ToArray())
             {
                 cpuLocalPeripherals[context].Remove(peripheral);
@@ -1049,7 +1070,7 @@ namespace Antmicro.Renode.Peripherals.Bus
                 }
             }
             var perCoreRegistration = registrationPoint as IPerCoreRegistration;
-            if(perCoreRegistration != null)
+            if(perCoreRegistration.CPU != null)
             {
                 cpuLocalPeripherals[perCoreRegistration.CPU].Remove(registrationPoint.RegistrationPoint.Range.StartAddress, registrationPoint.RegistrationPoint.Range.EndAddress);
             }
@@ -1062,7 +1083,7 @@ namespace Antmicro.Renode.Peripherals.Bus
         // this wrapper is to avoid compiler crashing on Ubuntu 20.04;
         // for unknown reasons calling `TryGetCurrentCPU` in the `Children` getter
         // caused the compiler to throw na InternalErrorException/NullReferenceException
-        // when building sources 
+        // when building sources
         private IEnumerable<IBusRegistered<IBusPeripheral>> GetPeripheralsForCurrentCPU()
         {
             TryGetCurrentCPU(out var context);
@@ -1075,7 +1096,7 @@ namespace Antmicro.Renode.Peripherals.Bus
                 ? cpuLocalPeripherals[context].Peripherals.Concat(globalPeripherals.Peripherals)
                 : globalPeripherals.Peripherals;
         }
-        
+
         private void FillAccessMethodsWithTaggedMethods(IBusPeripheral peripheral, string tag, ref PeripheralAccessMethods methods)
         {
             methods.Peripheral = peripheral;
@@ -1360,7 +1381,7 @@ namespace Antmicro.Renode.Peripherals.Bus
         private void RegisterInner(IBusPeripheral peripheral, PeripheralAccessMethods methods, BusRangeRegistration registrationPoint, ICPU context)
         {
             PeripheralCollection peripherals = null;
-            
+
             using(Machine.ObtainPausedState())
             {
                 // Register only for the selected core
@@ -1398,8 +1419,9 @@ namespace Antmicro.Renode.Peripherals.Bus
                     AddMappings(mappings, peripheral);
                 }
                 Machine.RegisterAsAChildOf(this, peripheral, registrationPoint);
+                Machine.RegisterBusController(peripheral, this);
             }
-        }        
+        }
 
         private IEnumerable<PeripheralLookupResult> FindTargets(ulong address, ulong count, ICPU context = null)
         {
@@ -1493,7 +1515,7 @@ namespace Antmicro.Renode.Peripherals.Bus
                 {
                     Machine.UnregisterFromParent(p);
                 }
-                
+
                 mappingsRemoved = false;
                 InitStructures();
             }
@@ -1530,6 +1552,7 @@ namespace Antmicro.Renode.Peripherals.Bus
             tags = new Dictionary<Range, TagEntry>();
             svdDevices = new List<SVDParser>();
             pausingTags = new HashSet<string>();
+            PostDeserializationInitStructures();
         }
 
         private List<MappedMemory> ObtainMemoryList()
@@ -1662,6 +1685,17 @@ namespace Antmicro.Renode.Peripherals.Bus
             this.Log(LogLevel.Warning, warning, address, value, type);
         }
 
+        private IDisposable SetLocalContext(ICPU cpu)
+        {
+            return threadLocalContext.Initialize(cpu);
+        }
+
+        [PostDeserialization]
+        private void PostDeserializationInitStructures()
+        {
+            threadLocalContext = new ThreadLocalContext(this);
+        }
+
         private static MappedSegmentWrapper FromRegistrationPointToSegmentWrapper(IMappedSegment segment, BusRangeRegistration registrationPoint, ICPUWithMappedMemory context)
         {
             if(segment.StartingOffset >= registrationPoint.Range.Size + registrationPoint.Offset)
@@ -1689,6 +1723,8 @@ namespace Antmicro.Renode.Peripherals.Bus
 
         [Constructor]
         private ThreadLocal<int> cachedCpuId;
+        [Transient]
+        private ThreadLocalContext threadLocalContext;
         private object cpuSync;
         private Dictionary<Range, TagEntry> tags;
         private List<SVDParser> svdDevices;
@@ -1818,6 +1854,43 @@ namespace Antmicro.Renode.Peripherals.Bus
         {
             public string Name;
             public ulong DefaultValue;
+        }
+
+        private class ThreadLocalContext : IDisposable
+        {
+            public ThreadLocalContext(IBusController parent)
+            {
+                this.parent = parent;
+                context = new ThreadLocal<int?>(() => null, true);
+                emptyDisposable.Disable();
+            }
+
+            public IDisposable Initialize(ICPU cpu)
+            {
+                if(cpu == null)
+                {
+                    return emptyDisposable;
+                }
+                var previousContext = context.Value;
+                context.Value = parent.GetCPUId(cpu);
+                return DisposableWrapper.New(() =>
+                {
+                    context.Value = previousContext;
+                });
+            }
+
+            public void Dispose()
+            {
+                context.Dispose();
+            }
+
+            public bool InUse => context.Value.HasValue;
+            public int CPUId => context.Value.Value;
+
+            private readonly ThreadLocal<int?> context;
+            private readonly IBusController parent;
+
+            private static readonly DisposableWrapper emptyDisposable = new DisposableWrapper();
         }
     }
 }

@@ -18,6 +18,8 @@ namespace Antmicro.Renode.Utilities.RESD
             this.currentSample = new T();
 
             currentSample.TryReadMetadata(reader);
+
+            SampleDataOffset = reader.BaseStream.Position;
         }
 
         public T GetCurrentSample()
@@ -31,6 +33,13 @@ namespace Antmicro.Renode.Utilities.RESD
 
         public bool Move(int count)
         {
+            if(count == 0)
+            {
+                // if count is zero, we can return sample if either it's ready or we
+                // aren't at the end of the file
+                return sampleReady || !reader.EOF;
+            }
+
             if(reader.EOF)
             {
                 return false;
@@ -56,6 +65,8 @@ namespace Antmicro.Renode.Utilities.RESD
 
             return !reader.EOF;
         }
+
+        public long SampleDataOffset { get; }
 
         private bool sampleReady;
         private T currentSample;

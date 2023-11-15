@@ -51,14 +51,15 @@ namespace Antmicro.Renode.Peripherals.Sensors
             RegistersCollection = new ByteRegisterCollection(this, BuildRegisterMap());
         }
 
-        public void FeedSamplesFromRESD(ReadFilePath filePath, uint channelId = 0, ulong startTimestamp = 0, long sampleOffsetTime = 0)
+        public void FeedSamplesFromRESD(ReadFilePath filePath, uint channelId = 0, ulong startTimestamp = 0,
+            RESDStreamSampleOffset sampleOffsetType = RESDStreamSampleOffset.Specified, long sampleOffsetTime = 0)
         {
             lock(feederThreadLock)
             {
                 feedingSamplesFromFile = true;
                 feederThread?.Stop();
                 resdStream?.Dispose();
-                resdStream = this.CreateRESDStream<MAX86171_AFESample>(filePath, channelId);
+                resdStream = this.CreateRESDStream<MAX86171_AFESample>(filePath, channelId, sampleOffsetType, sampleOffsetTime);
                 resdStream.MetadataChanged += () =>
                 {
                     staleConfiguration = true;
@@ -92,7 +93,7 @@ namespace Antmicro.Renode.Peripherals.Sensors
                     {
                         circularFifo.EnqueueFrame(defaultMeasurements);
                     }
-                }, sampleOffsetTime: sampleOffsetTime, startTime: startTimestamp);
+                }, startTime: startTimestamp);
                 this.Log(LogLevel.Info, "Started feeding samples from RESD file at {0}Hz", CalculateCurrentFrequency());
             }
         }
@@ -982,12 +983,18 @@ namespace Antmicro.Renode.Peripherals.Sensors
 
             public override bool Skip(SafeBinaryReader reader, int count)
             {
-                for(var i = 0; i < count && !reader.EOF; ++i)
+                for(; count > 0 && !reader.EOF; count--)
                 {
                     var frameLength = reader.ReadByte();
                     reader.SkipBytes(frameLength * 4);
                 }
-                return !reader.EOF;
+                return count == 0;
+            }
+
+            public override string ToString()
+            {
+                var sampleFrame = Frame.Select(sample => new AFESample(sample));
+                return String.Join(", ", sampleFrame.Select(frame => $"[{frame}]"));
             }
 
             private const int MaxChannels = 9;
@@ -1135,7 +1142,7 @@ namespace Antmicro.Renode.Peripherals.Sensors
                 innerPacket = (((int)tag & 0xF) << 20) | (value & 0x0FFFFF);
             }
 
-            public int Value => (innerPacket & 0x0FFFFF);
+            public int Value => ((innerPacket & 0x0FFFFF) << 12) >> 12;
             public SampleSource Tag => (SampleSource)((innerPacket & 0xF00000) >> 20);
             public byte Byte1 => (byte)((innerPacket & 0xFF0000) >> 16);
             public byte Byte2 => (byte)((innerPacket & 0x00FF00) >> 8);

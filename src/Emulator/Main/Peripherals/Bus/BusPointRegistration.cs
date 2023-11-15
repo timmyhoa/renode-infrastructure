@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2010-2022 Antmicro
+// Copyright (c) 2010-2023 Antmicro
 // Copyright (c) 2011-2015 Realtime Embedded
 //
 // This file is licensed under the MIT License.
@@ -11,7 +11,7 @@ using Antmicro.Renode.Peripherals.CPU;
 
 namespace Antmicro.Renode.Peripherals.Bus
 {
-    public class BusPointRegistration : IRegistrationPoint
+    public class BusPointRegistration : IPerCoreRegistration
     {
         public BusPointRegistration(ulong address, ulong offset = 0, ICPU cpu = null)
         {
@@ -19,7 +19,7 @@ namespace Antmicro.Renode.Peripherals.Bus
             Offset = offset;
             CPU = cpu;
         }
-        
+
         public override string ToString()
         {
             var result = StartingPoint.ToString();
@@ -46,7 +46,7 @@ namespace Antmicro.Renode.Peripherals.Bus
         {
             return new BusPointRegistration(address);
         }
-        
+
         public ulong StartingPoint { get; set; }
         public ulong Offset { get; set; }
         public ICPU CPU { get; set; }

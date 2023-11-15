@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2010-2022 Antmicro
+// Copyright (c) 2010-2023 Antmicro
 // Copyright (c) 2011-2015 Realtime Embedded
 //
 // This file is licensed under the MIT License.
@@ -25,7 +25,7 @@ using Antmicro.Migrant.Customization;
 
 namespace Antmicro.Renode.Utilities
 {
-    public class CachingFileFetcher
+    public class CachingFileFetcher : IDisposable
     {
         public CachingFileFetcher()
         {
@@ -76,6 +76,26 @@ namespace Antmicro.Renode.Utilities
             finally
             {
                 Monitor.Exit(concurrentLock);
+            }
+        }
+
+        public void Dispose()
+        {
+            if(EmulationManager.DisableEmulationFilesCleanup)
+            {
+                return;
+            }
+
+            foreach(var file in fetchedFiles.Keys)
+            {
+                try
+                {
+                    File.Delete(file);
+                }
+                catch(Exception)
+                {
+                    // nothing we can do
+                }
             }
         }
         
@@ -180,7 +200,9 @@ namespace Antmicro.Renode.Utilities
             var wasCancelled = false;
 
             using(var downloadProgressHandler = EmulationManager.Instance.ProgressMonitor.Start(GenerateProgressMessage(uri), false, true))
+#pragma warning disable SYSLIB0014 // Even though WebClient is technically obselete, there's no better replacement for our use case
             using(client = new WebClient())
+#pragma warning restore SYSLIB0014
             {
                 Logger.LogAs(this, LogLevel.Info, "Downloading {0}.", uri);
                 var now = CustomDateTime.Now;
@@ -486,7 +508,7 @@ namespace Antmicro.Renode.Utilities
         private static byte[] GetSHA1Checksum(string fileName)
         {
             using(var file = new FileStream(fileName, FileMode.Open))
-            using(var sha = new SHA1Managed())
+            using(var sha = SHA1.Create())
             {
                 sha.Initialize();
                 return sha.ComputeHash(file);

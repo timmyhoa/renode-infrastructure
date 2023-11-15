@@ -26,6 +26,7 @@ namespace Antmicro.Renode.Peripherals.UART
         public override void WriteChar(byte value)
         {
             receiveFifo.Enqueue(value);
+            UpdateInterrupts();
         }
 
         public uint ReadDoubleWord(long offset)
@@ -55,6 +56,10 @@ namespace Antmicro.Renode.Peripherals.UART
 
         public override uint BaudRate => 115200;
 
+        public GPIO RxIRQ { get; } = new GPIO();
+        public GPIO TxIRQ { get; } = new GPIO();
+        public GPIO TxEndIRQ { get; } = new GPIO();
+
         protected override void CharWritten()
         {
             // intentionally left blank
@@ -63,6 +68,16 @@ namespace Antmicro.Renode.Peripherals.UART
         protected override void QueueEmptied()
         {
             // intentionally left blank
+        }
+
+        private void UpdateInterrupts()
+        {
+            // On real hardware FCR.RTRG value doesn't affect interrupt requests,
+            // they are triggered for every character in RX fifo.
+            RxIRQ.Set(receiveInterruptEnable.Value && receiveFifo.Count > 0);
+
+            TxEndIRQ.Set(transmitEndInterruptEnable.Value);
+            TxIRQ.Set(transmitInterruptEnable.Value);
         }
 
         private void DefineRegisters()
@@ -75,6 +90,7 @@ namespace Antmicro.Renode.Peripherals.UART
                         {
                             this.Log(LogLevel.Warning, "Trying to read data from empty receive fifo");
                         }
+                        UpdateInterrupts();
                         return value;
                     })
                 .WithTaggedFlag("MPB", 9)
@@ -115,13 +131,37 @@ namespace Antmicro.Renode.Peripherals.UART
                 .WithTaggedFlag("DCME", 9)
                 .WithTaggedFlag("IDSEL", 10)
                 .WithReservedBits(11, 5)
-                .WithTaggedFlag("RIE", 16)
+                .WithFlag(16, out receiveInterruptEnable, name: "RIE")
                 .WithReservedBits(17, 3)
-                .WithTaggedFlag("TIE", 20)
-                .WithTaggedFlag("TEIE", 21)
+                .WithFlag(20, out transmitInterruptEnable, name: "TIE")
+                .WithFlag(21, out transmitEndInterruptEnable, name: "TEIE")
                 .WithReservedBits(22, 2)
                 .WithTaggedFlag("SSE", 24)
-                .WithReservedBits(25, 7);
+                .WithReservedBits(25, 7)
+                .WithWriteCallback((_, __) => UpdateInterrupts());
+
+            Registers.FIFOControlRegister.Define(this, resetValue: 0x1f1f0000)
+                .WithTaggedFlag("DRES", 0)
+                .WithReservedBits(1, 7)
+                .WithTag("TTRG", 8, 5)
+                .WithReservedBits(13, 2)
+                .WithTaggedFlag("TFRST", 15)
+                // On real hardware FCR.RTRG value doesn't affect interrupt requests
+                // they are triggered for every character in RX fifo.
+                .WithValueField(16, 5, out receiveFifoDataTriggerNumber, name: "RTRG",
+                    writeCallback: (oldValue, newValue) =>
+                    {
+                        if(newValue > 0xf)
+                        {
+                            this.Log(LogLevel.Warning, "{0:X} - value prohibited for FCR.RTRG field, keeping the previous value: {1:X}", newValue, oldValue);
+                            receiveFifoDataTriggerNumber.Value = oldValue;
+                        }
+                        UpdateInterrupts();
+                    })
+                .WithReservedBits(21, 2)
+                .WithTaggedFlag("RFRST", 23)
+                .WithTag("RSTRG", 24, 5)
+                .WithReservedBits(29, 3);
 
             Registers.FIFOReceiveStatus.Define(this, resetValue: 0x0)
                 .WithFlag(0, mode: FieldMode.Read, name: "DR",
@@ -130,13 +170,19 @@ namespace Antmicro.Renode.Peripherals.UART
                         return receiveFifo.Count > 0;
                     })
                 .WithReservedBits(1, 7)
-                .WithTag("R", 8, 6)
+                .WithValueField(8, 6, FieldMode.Read, name: "R",
+                    valueProviderCallback: _ => (ulong)receiveFifo.Count)
                 .WithReservedBits(14, 2)
                 .WithTag("PNUM", 16, 6)
                 .WithReservedBits(22, 2)
                 .WithTag("FNUM", 24, 6)
                 .WithReservedBits(30, 2);
         }
+
+        private IValueRegisterField receiveFifoDataTriggerNumber;
+        private IFlagRegisterField receiveInterruptEnable;
+        private IFlagRegisterField transmitInterruptEnable;
+        private IFlagRegisterField transmitEndInterruptEnable;
 
         private readonly Queue<byte> receiveFifo = new Queue<byte>();
 
@@ -145,6 +191,7 @@ namespace Antmicro.Renode.Peripherals.UART
             ReceiveData = 0x0,
             TransmitData = 0x4,
             CommonControl0 = 0x8,
+            FIFOControlRegister = 0x24,
             FIFOReceiveStatus = 0x50,
         }
     }

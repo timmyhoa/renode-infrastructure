@@ -24,7 +24,7 @@ namespace Antmicro.Renode.Peripherals.CPU
     public class OpenTitan_BigNumberAcceleratorCore : RiscV32, IOpenTitan_BigNumberAcceleratorCore
     {
         public OpenTitan_BigNumberAcceleratorCore(OpenTitan_BigNumberAccelerator parent, OpenTitan_ScrambledMemory instructionsMemory, OpenTitan_ScrambledMemory dataMemory)
-            : base(timeProvider: null, cpuType: "rv32im", machine: null, hartId: 0, privilegeArchitecture: PrivilegeArchitecture.Priv1_10, endianness: Endianess.LittleEndian)
+            : base(timeProvider: null, cpuType: "rv32im_zicsr", machine: null, hartId: 0, privilegeArchitecture: PrivilegeArchitecture.Priv1_10, endianness: Endianess.LittleEndian)
         {
             this.parent = parent;
             this.instructionsMemory = instructionsMemory;
@@ -278,7 +278,7 @@ namespace Antmicro.Renode.Peripherals.CPU
             LastError = error;
             if(stopExecution)
             {
-                this.TlibRestartTranslationBlock();
+                this.TlibRequestTranslationBlockInterrupt();
             }
         }
 
@@ -495,6 +495,7 @@ namespace Antmicro.Renode.Peripherals.CPU
             {
                 Log(LogLevel.Error, $"The wsr is argument is too high: 0x{wsr:X}");
                 ThrowError(CoreError.IllegalInstruction);
+                return;
             }
 
             if(isWrite)
@@ -766,6 +767,7 @@ namespace Antmicro.Renode.Peripherals.CPU
             if((incrementRs && incrementRd) || grdVal > 31 || grsVal > 31)
             {
                 ThrowError(CoreError.IllegalInstruction);
+                return;
             }
 
             if(incrementRd)
@@ -792,6 +794,7 @@ namespace Antmicro.Renode.Peripherals.CPU
             if((incrementRs1 && incrementRd) || grdVal > 31)
             {
                 ThrowError(CoreError.IllegalInstruction);
+                return;
             }
 
             if(incrementRd)

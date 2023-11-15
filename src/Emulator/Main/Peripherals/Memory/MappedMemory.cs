@@ -21,6 +21,7 @@ using System.Threading;
 using LZ4;
 using Antmicro.Renode.UserInterface;
 using Antmicro.Renode.Core;
+using Antmicro.Renode.Peripherals.CPU;
 #if PLATFORM_WINDOWS
 using System.Reflection.Emit;
 using System.Reflection;
@@ -29,7 +30,7 @@ using System.Reflection;
 namespace Antmicro.Renode.Peripherals.Memory
 {
     [Icon("memory")]
-    public sealed class MappedMemory : IBytePeripheral, IWordPeripheral, IDoubleWordPeripheral, IQuadWordPeripheral, IMapped, IDisposable, IKnownSize, ISpeciallySerializable, IMemory, IMultibyteWritePeripheral
+    public sealed class MappedMemory : IBytePeripheral, IWordPeripheral, IDoubleWordPeripheral, IQuadWordPeripheral, IMapped, IDisposable, IKnownSize, ISpeciallySerializable, IMemory, IMultibyteWritePeripheral, ICanLoadFiles
     {
 #if PLATFORM_WINDOWS
         static MappedMemory()
@@ -241,6 +242,12 @@ namespace Antmicro.Renode.Peripherals.Memory
 
         public void ReadBytes(long offset, int count, byte[] destination, int startIndex)
         {
+            if(offset < 0 || offset > size - count)
+            {
+                this.Log(LogLevel.Error, "Tried to read {0} bytes at offset 0x{1:X} outside the range of the peripheral 0x0 - 0x{2:X}", count, offset, size);
+                return;
+            }
+
             var read = 0;
             while(read < count)
             {
@@ -253,7 +260,7 @@ namespace Antmicro.Renode.Peripherals.Memory
             }
         }
 
-        public byte[] ReadBytes(long offset, int count)
+        public byte[] ReadBytes(long offset, int count, ICPU context = null)
         {
             var result = new byte[count];
             ReadBytes(offset, count, result, 0);
@@ -270,8 +277,14 @@ namespace Antmicro.Renode.Peripherals.Memory
             WriteBytes(offset, value, 0, count);
         }
 
-        public void WriteBytes(long offset, byte[] array, int startingIndex, int count)
+        public void WriteBytes(long offset, byte[] array, int startingIndex, int count, ICPU context = null)
         {
+            if(offset < 0 || offset > size - count)
+            {
+                this.Log(LogLevel.Error, "Tried to write {0} bytes at offset 0x{1:X} outside the range of the peripheral 0x0 - 0x{2:X}", count, offset, size);
+                return;
+            }
+
             var written = 0;
             while(written < count)
             {
@@ -281,7 +294,7 @@ namespace Antmicro.Renode.Peripherals.Memory
                 var length = Math.Min(count - written, (int)(SegmentSize - localOffset));
                 Marshal.Copy(array, startingIndex + written, new IntPtr(segment.ToInt64() + localOffset), length);
                 written += length;
-                
+
                 InvalidateMemoryFragment(currentOffset, length);
             }
         }
@@ -289,6 +302,11 @@ namespace Antmicro.Renode.Peripherals.Memory
         public void WriteString(long offset, string value)
         {
             WriteBytes(offset, new System.Text.ASCIIEncoding().GetBytes(value).Concat(new []{ (byte)'\0' }).ToArray());
+        }
+
+        public void LoadFileChunks(string path, IEnumerable<FileChunk> chunks, ICPU cpu)
+        {
+            this.LoadFileChunks(chunks, cpu);
         }
 
         public void Reset()

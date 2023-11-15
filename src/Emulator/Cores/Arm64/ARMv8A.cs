@@ -24,7 +24,14 @@ namespace Antmicro.Renode.Peripherals.CPU
                 : base(cpuId, cpuType, machine, endianness, CpuBitness.Bits64)
         {
             gic = genericInterruptController;
-            gic.AttachCPU(cpuId, this);
+            try
+            {
+                gic.AttachCPU(this);
+            }
+            catch(Exception e)
+            {
+                throw new ConstructionException("Failed to attach CPU to Generic Interrupt Controller", e);
+            }
             Reset();
             HasSingleSecurityState = TlibHasEl3() == 0;
         }
@@ -115,7 +122,7 @@ namespace Antmicro.Renode.Peripherals.CPU
                  * TODO
                  * The ‘org.gnu.gdb.aarch64.fpu’ feature is optional. If present, it should contain registers ‘v0’ through ‘v31’, ‘fpsr’, and ‘fpcr’.
                  * The ‘org.gnu.gdb.aarch64.sve’ feature is optional. If present, it should contain registers ‘z0’ through ‘z31’, ‘p0’ through ‘p15’, ‘ffr’ and ‘vg’.
-                 * The ‘org.gnu.gdb.aarch64.pauth’ feature is optional. If present, it should contain registers ‘pauth_dmask’ and ‘pauth_cmask’. 
+                 * The ‘org.gnu.gdb.aarch64.pauth’ feature is optional. If present, it should contain registers ‘pauth_dmask’ and ‘pauth_cmask’.
                  */
 
                 return features;

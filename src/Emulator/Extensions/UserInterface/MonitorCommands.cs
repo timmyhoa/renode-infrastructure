@@ -373,9 +373,9 @@ namespace Antmicro.Renode.UserInterface
             writer.WriteLine("".PadRight(lineLength, '-'));
         }
 
-        private void ProcessDeviceAction(Type device, string name, IEnumerable<Token> p, ICommandInteraction writer)
+        private void ProcessDeviceAction(Type deviceType, string name, IEnumerable<Token> p, ICommandInteraction writer)
         {
-            var devInfo = GetMonitorInfo(device);
+            var devInfo = GetMonitorInfo(deviceType);
             if(!p.Any())
             {
                 if(devInfo != null)
@@ -388,13 +388,15 @@ namespace Antmicro.Renode.UserInterface
                 object result;
                 try
                 {
-                    result = ExecuteDeviceAction(device, name, p);
+                    var device = IdentifyDevice(name);
+                    result = ExecuteDeviceAction(name, device, p);
                 }
-                catch(ParametersMismatchException)
+                catch(ParametersMismatchException e)
                 {
-                    if(devInfo != null)
+                    var nodeInfo = GetMonitorInfo(e.Type);
+                    if(nodeInfo != null)
                     {
-                        PrintMonitorInfo(name, devInfo, writer, p.First().OriginalValue);
+                        PrintMonitorInfo(e.Name, nodeInfo, writer, e.Command);
                     }
                     throw;
                 }
@@ -884,9 +886,8 @@ namespace Antmicro.Renode.UserInterface
             return device;
         }
 
-        private object InvokeGet(string name, MemberInfo info)
+        private object InvokeGet(object device, MemberInfo info)
         {
-            var device = IdentifyDevice(name);
             var context = CreateInvocationContext(device, info);
             if(context != null)
             {
@@ -908,9 +909,8 @@ namespace Antmicro.Renode.UserInterface
             }
         }
 
-        private void InvokeSet(string name, MemberInfo info, object parameter)
+        private void InvokeSet(object device, MemberInfo info, object parameter)
         {
-            var device = IdentifyDevice(name);
             var context = CreateInvocationContext(device, info);
             if(context != null)
             {
@@ -934,9 +934,8 @@ namespace Antmicro.Renode.UserInterface
             }
         }
 
-        private object InvokeExtensionMethod(string name, MethodInfo method, List<object> parameters)
+        private object InvokeExtensionMethod(object device, MethodInfo method, List<object> parameters)
         {
-            var device = IdentifyDevice(name);
             var context = InvokeContext.CreateStatic(method.ReflectedType);
             if(context != null)
             {
@@ -948,10 +947,8 @@ namespace Antmicro.Renode.UserInterface
             }
         }
 
-        private object InvokeMethod(string name, MethodInfo method, List<object> parameters)
+        private object InvokeMethod(object device, MethodInfo method, List<object> parameters)
         {
-            var device = IdentifyDevice(name);
-
             var context = CreateInvocationContext(device, method);
             if(context != null)
             {
@@ -963,10 +960,8 @@ namespace Antmicro.Renode.UserInterface
             }
         }
 
-        private void InvokeSetIndex(string name, PropertyInfo property, List<object> parameters)
+        private void InvokeSetIndex(object device, PropertyInfo property, List<object> parameters)
         {
-            var device = IdentifyDevice(name);
-
             var context = CreateInvocationContext(device, property);
             if(context != null)
             {
@@ -978,9 +973,8 @@ namespace Antmicro.Renode.UserInterface
             }
         }
 
-        private object InvokeGetIndex(string name, PropertyInfo property, List<object> parameters)
+        private object InvokeGetIndex(object device, PropertyInfo property, List<object> parameters)
         {
-            var device = IdentifyDevice(name);
             var context = CreateInvocationContext(device, property);
             if(context != null)
             {
@@ -1131,9 +1125,10 @@ namespace Antmicro.Renode.UserInterface
             return true;
         }
 
-        public object ExecuteDeviceAction(Type type, string name, IEnumerable<Token> p)
+        public object ExecuteDeviceAction(string name, object device, IEnumerable<Token> p)
         {
             string commandValue;
+            var type = device.GetType();
             var command = p.FirstOrDefault();
             if(command is LiteralToken || command is LeftBraceToken)
             {
@@ -1171,13 +1166,13 @@ namespace Antmicro.Renode.UserInterface
                     List<object> parameters;
                     if(TryPrepareParameters(parameterArray, methodParameters, out parameters))
                     {
-                        return InvokeMethod(name, foundMethod, parameters);
+                        return InvokeMethod(device, foundMethod, parameters);
                     }
 
                 }
                 if(!foundExts.Any())
                 {
-                    throw new ParametersMismatchException();
+                    throw new ParametersMismatchException(type, commandValue, name);
                 }
             }
             if(foundExts.Any())
@@ -1189,15 +1184,22 @@ namespace Antmicro.Renode.UserInterface
                     List<object> parameters;
                     if(TryPrepareParameters(parameterArray, extensionParameters, out parameters))
                     {
-                        return InvokeExtensionMethod(name, foundExt, parameters);
+                        return InvokeExtensionMethod(device, foundExt, parameters);
                     }
                 }
-                throw new ParametersMismatchException();
+                throw new ParametersMismatchException(type, commandValue, name);
 
             }
             else if(foundField != null)
             {
-                if(setValue != null && !foundField.IsLiteral && !foundField.IsInitOnly)
+                //if setValue is a LiteralToken then it must contain the next command to process in recursive call
+                if(CanTypeBeChained(foundField.FieldType) && setValue != null && setValue is LiteralToken)
+                {
+                    var currentObject = InvokeGet(device, foundField);
+                    var objectFullName = $"{name} {commandValue}";
+                    return RecursiveExecuteDeviceAction(objectFullName, currentObject, p, 1);
+                }
+                else if(setValue != null && !foundField.IsLiteral && !foundField.IsInitOnly)
                 {
                     object value;
                     try
@@ -1212,17 +1214,24 @@ namespace Antmicro.Renode.UserInterface
                         }
                         throw;
                     }
-                    InvokeSet(name, foundField, value);
+                    InvokeSet(device, foundField, value);
                     return null;
                 }
                 else
                 {
-                    return InvokeGet(name, foundField);
+                    return InvokeGet(device, foundField);
                 }
             }
             else if(foundProp != null)
             {
-                if(setValue != null && foundProp.IsCurrentlySettable(CurrentBindingFlags))
+                //if setValue is a LiteralToken then it must contain the next command to process in recursive call
+                if(CanTypeBeChained(foundProp.PropertyType) && setValue != null && setValue is LiteralToken)
+                {
+                    var currentObject = InvokeGet(device, foundProp);
+                    var objectFullName = $"{name} {commandValue}";
+                    return RecursiveExecuteDeviceAction(objectFullName, currentObject, p, 1); 
+                }
+                else if(setValue != null && foundProp.IsCurrentlySettable(CurrentBindingFlags))
                 {
                     object value;
                     try
@@ -1237,12 +1246,12 @@ namespace Antmicro.Renode.UserInterface
                         }
                         throw;
                     }
-                    InvokeSet(name, foundProp, value);
+                    InvokeSet(device, foundProp, value);
                     return null;
                 }
                 else if(foundProp.IsCurrentlyGettable(CurrentBindingFlags))
                 {
-                    return InvokeGet(name, foundProp);
+                    return InvokeGet(device, foundProp);
                 }
                 else
                 {
@@ -1258,12 +1267,12 @@ namespace Antmicro.Renode.UserInterface
                 setValue = null;
                 if(parameterArray.Length < 3 || !(parameterArray[0] is LeftBraceToken))
                 {
-                    throw new ParametersMismatchException();
+                    throw new ParametersMismatchException(type, commandValue, name);
                 }
                 var index = parameterArray.IndexOf(x => x is RightBraceToken);
                 if(index == -1)
                 {
-                    throw new ParametersMismatchException();
+                    throw new ParametersMismatchException(type, commandValue, name);
                 }
                 if(index == parameterArray.Length - 2)
                 {
@@ -1271,7 +1280,7 @@ namespace Antmicro.Renode.UserInterface
                 }
                 else if(index != parameterArray.Length - 1)
                 {
-                    throw new ParametersMismatchException();
+                    throw new ParametersMismatchException(type, commandValue, name);
                 }
                 var getParameters = parameterArray.Skip(1).Take(index - 1).ToArray();
                 foreach(var foundIndexer in foundIndexers.OrderBy(x=>x.GetIndexParameters ().Count())
@@ -1290,12 +1299,12 @@ namespace Antmicro.Renode.UserInterface
                                 value = ConvertValue(setValue.GetObjectValue(), foundIndexer.PropertyType);
 
 
-                                InvokeSetIndex(name, foundIndexer, parameters.Concat(new[] { value }).ToList());
+                                InvokeSetIndex(device, foundIndexer, parameters.Concat(new[] { value }).ToList());
                                 return null;
                             }
                             else
                             {
-                                return InvokeGetIndex(name, foundIndexer, parameters);
+                                return InvokeGetIndex(device, foundIndexer, parameters);
                             }
                         }
                         catch(Exception e)
@@ -1308,7 +1317,7 @@ namespace Antmicro.Renode.UserInterface
                         }
                     }
                 }
-                throw new ParametersMismatchException();
+                throw new ParametersMismatchException(type, commandValue, name);
             }
             if(command is LiteralToken)
             {
@@ -1318,6 +1327,20 @@ namespace Antmicro.Renode.UserInterface
             {
                 throw new RecoverableException(String.Format("{0} does not provide a default-named indexer.", name));
             }
+        }
+
+        private bool CanTypeBeChained(Type type)
+        {
+            return !type.IsEnum && !type.IsValueType && type != typeof(string);
+        }
+
+        private object RecursiveExecuteDeviceAction(string name, object currentObject, IEnumerable<Token> p, int tokensToSkip)
+        {
+            if(currentObject == null)
+            {
+                return null;
+            }
+            return ExecuteDeviceAction(name, currentObject, p.Skip(tokensToSkip)); 
         }
 
         IEnumerable<PropertyInfo> GetAvailableIndexers(Type objectType)

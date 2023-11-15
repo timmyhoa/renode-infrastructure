@@ -70,8 +70,6 @@ namespace Antmicro.Renode.Peripherals.CPU
             InitDisas();
             externalMmuWindowsCount = TlibGetMmuWindowsCount();
         }
-        
-        public abstract string Architecture { get; }
 
         public abstract string GDBArchitecture { get; }
 
@@ -922,7 +920,7 @@ namespace Antmicro.Renode.Peripherals.CPU
         {
             var tempArray = new long[size];
             Marshal.Copy(arrayStart, tempArray, 0, size);
-            machine.AppendDirtyAddresses(tempArray);
+            machine.AppendDirtyAddresses(Id, tempArray);
         }
 
         [Transient]
@@ -1451,8 +1449,8 @@ namespace Antmicro.Renode.Peripherals.CPU
                 if(anyEnabled)
                 {
                     // TODO: think if we have to tlib restart at all? if there is no pausing in watchpoint hook than maybe it's not necessary at all?
-                    parent.TlibRestartTranslationBlock();
-                    // note that on the line above we effectively exit the function so the stuff below is not executed
+                    parent.TlibRequestTranslationBlockInterrupt();
+                    return;
                 }
                 else
                 {
@@ -1494,8 +1492,8 @@ namespace Antmicro.Renode.Peripherals.CPU
                     {
                         parent.TlibRestoreContext();
                     }
-                    parent.TlibRestartTranslationBlock();
-                    // Note that any code after RestartTranslationBlock won't be executed
+                    parent.TlibRequestTranslationBlockInterrupt();
+                    return;
                 }
                 guard.Value = null;
             }
@@ -1635,8 +1633,8 @@ namespace Antmicro.Renode.Peripherals.CPU
         [Import]
         private FuncInt32Int32 TlibExecute;
 
-        [Import(UseExceptionWrapper = false)]
-        protected Action TlibRestartTranslationBlock;
+        [Import]
+        protected Action TlibRequestTranslationBlockInterrupt;
 
         [Import]
         protected Action TlibSetReturnRequest;

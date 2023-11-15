@@ -20,7 +20,7 @@ namespace Antmicro.Renode.Peripherals.CPU
 {
     public partial class ARMv8R : TranslationCPU, IARMSingleSecurityStateCPU, IPeripheralRegister<ARM_GenericTimer, NullRegistrationPoint>
     {
-        public ARMv8R(string cpuType, IMachine machine, ARM_GenericInterruptController genericInterruptController, uint cpuId = 0, Endianess endianness = Endianess.LittleEndian, SecurityState securityState = SecurityState.NonSecure, uint mpuRegionsCount = 16, ulong defaultHVBARValue = 0, ulong defaultVBARValue = 0)
+        public ARMv8R(string cpuType, IMachine machine, ARM_GenericInterruptController genericInterruptController, uint cpuId = 0, Endianess endianness = Endianess.LittleEndian, SecurityState securityState = SecurityState.NonSecure, uint mpuRegionsCount = 16, ulong defaultHVBARValue = 0, ulong defaultVBARValue = 0, uint mpuHyperRegionsCount = 16)
                 : base(cpuId, cpuType, machine, endianness, CpuBitness.Bits64)
         {
             SecurityState = securityState;
@@ -28,8 +28,15 @@ namespace Antmicro.Renode.Peripherals.CPU
             this.defaultVBARValue = defaultVBARValue;
 
             gic = genericInterruptController;
-            gic.AttachCPU(cpuId, this);
-            TlibSetMpuRegionsCount(mpuRegionsCount);
+            try
+            {
+                gic.AttachCPU(this);
+            }
+            catch(Exception e)
+            {
+                throw new ConstructionException("Failed to attach CPU to Generic Interrupt Controller", e);
+            }
+            TlibSetMpuRegionsCount(mpuRegionsCount, mpuHyperRegionsCount);
             Reset();
         }
 
@@ -256,7 +263,7 @@ namespace Antmicro.Renode.Peripherals.CPU
         private ActionStringUInt64 TlibSetSystemRegister;
 
         [Import]
-        private ActionUInt32 TlibSetMpuRegionsCount;
+        private ActionUInt32UInt32 TlibSetMpuRegionsCount;
 #pragma warning restore 649
     }
 }
