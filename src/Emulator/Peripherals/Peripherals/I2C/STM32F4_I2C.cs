@@ -108,7 +108,6 @@ namespace Antmicro.Renode.Peripherals.I2C
                 if (lastReadRegister != Registers.Status1) {
                     return;
                 }
-                this.DebugLog("This works");
 
                 if (!masterSlave.Value || !willReadOnSelectedSlave){
                     return;
@@ -118,16 +117,17 @@ namespace Antmicro.Renode.Peripherals.I2C
                     dataToReceive.Enqueue(selectedSlave.Read()[0]);
                 }
                 dataToReceive.Enqueue(selectedSlave.Read()[0]);
+                byteTransferFinished.Value = dataToReceive.Count > 0;
                 return;
             });
             data = new DoubleWordRegister(this);
 
             acknowledgeEnable = control1.DefineFlagField(10, changeCallback: (_, newVal) => {
                 if (newVal) {
-                    nextByteAck = ACKStatus.Enabled;
+                    ackStatus = ACKStatus.Enabled;
                     return;
                 } 
-                nextByteAck = ACKStatus.DisableNextRead;
+                ackStatus = ACKStatus.DisableNextRead;
             });
 
             bufferInterruptEnable = control2.DefineFlagField(10, changeCallback: InterruptEnableChange);
@@ -183,9 +183,9 @@ namespace Antmicro.Renode.Peripherals.I2C
             if(dataToReceive.Any())
             {
                 result = dataToReceive.Dequeue();
-                if (!stopped && nextByteAck != ACKStatus.Disabled){
-                    if (nextByteAck == ACKStatus.DisableNextRead) {
-                        nextByteAck = ACKStatus.Disabled;
+                if (!stopped && ackStatus != ACKStatus.Disabled){
+                    if (ackStatus == ACKStatus.DisableNextRead) {
+                        ackStatus = ACKStatus.Disabled;
                     } 
                     dataToReceive.Enqueue(selectedSlave.Read()[0]);
                 }
@@ -334,7 +334,7 @@ namespace Antmicro.Renode.Peripherals.I2C
         private DoubleWordRegister data;
         private IFlagRegisterField acknowledgeEnable;
         private Registers lastReadRegister;
-        private ACKStatus nextByteAck;
+        private ACKStatus ackStatus;
         private enum ACKStatus {
             Enabled,
             DisableNextRead,
