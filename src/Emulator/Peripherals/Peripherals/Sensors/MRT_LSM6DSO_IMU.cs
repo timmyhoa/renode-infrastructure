@@ -9,6 +9,7 @@ using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using Antmicro.Renode.Core;
+using Antmicro.Renode.Time;
 using Antmicro.Renode.Core.Structure.Registers;
 using Antmicro.Renode.Logging;
 using Antmicro.Renode.Peripherals.I2C;
@@ -18,7 +19,7 @@ using Antmicro.Renode.Utilities.RESD;
 
 namespace Antmicro.Renode.Peripherals.Sensors
 {
-    public class MRT_LSM6DSO_IMU : BasicBytePeripheral, II2CPeripheral, IProvidesRegisterCollection<ByteRegisterCollection>, ITemperatureSensor
+    public class MRT_LSM6DSO_IMU : BasicBytePeripheral, II2CPeripheral, IProvidesRegisterCollection<ByteRegisterCollection>, ITemperatureSensor, IUnderstandRESD
     {
         public MRT_LSM6DSO_IMU(IMachine machine) : base(machine)
         {
@@ -39,32 +40,14 @@ namespace Antmicro.Renode.Peripherals.Sensors
             }
         }
 
-        public void FeedAccelerationSamplesFromRESD(string path, uint channel = 0, ulong startTime = 0, long sampleOffsetTime = 0)
+        public void FeedAccelerationSamplesFromRESD(string path, uint channel = 0, ulong startTime = 0,
+            RESDStreamSampleOffset sampleOffsetType = RESDStreamSampleOffset.Specified, long sampleOffsetTime = 0)
         {
-            accelerometerResdStream = this.CreateRESDStream<AccelerationSample>(path, channel);
+            accelerometerResdStream = this.CreateRESDStream<AccelerationSample>(path, channel, sampleOffsetType, sampleOffsetTime);
             accelerometerFeederThread?.Stop();
             accelerometerFeederThread = accelerometerResdStream.StartSampleFeedThread(this,
                 DataRateToFrequency(accelerometerFifoBatchingDataRateSelection.Value),
-                (sample, ts, status) =>
-                {
-                    switch(status)
-                    {
-                        case RESDStreamStatus.BeforeStream:
-                            commonFifo.FeedAccelerationSample(DefaultAccelerationX, DefaultAccelerationY, DefaultAccelerationZ);
-                            break;
-                        case RESDStreamStatus.AfterStream:
-                            accelerometerFeederThread.Stop();
-                            accelerometerFeederThread = CreateAccelerationDefaultSampleFeeder();
-                            break;
-                        case RESDStreamStatus.OK:
-                            commonFifo.FeedAccelerationSample(
-                                (decimal)sample.AccelerationX / 1e6m,
-                                (decimal)sample.AccelerationY / 1e6m,
-                                (decimal)sample.AccelerationZ / 1e6m);
-                            break;
-                    }
-                },
-                startTime, sampleOffsetTime
+                startTime: startTime
             );
         }
 
@@ -76,32 +59,14 @@ namespace Antmicro.Renode.Peripherals.Sensors
             }
         }
 
-        public void FeedAngularRateSamplesFromRESD(string path, uint channel = 0, ulong startTime = 0, long sampleOffsetTime = 0)
+        public void FeedAngularRateSamplesFromRESD(string path, uint channel = 0, ulong startTime = 0,
+            RESDStreamSampleOffset sampleOffsetType = RESDStreamSampleOffset.Specified, long sampleOffsetTime = 0)
         {
-            gyroResdStream = this.CreateRESDStream<AngularRateSample>(path, channel);
+            gyroResdStream = this.CreateRESDStream<AngularRateSample>(path, channel, sampleOffsetType, sampleOffsetTime);
             gyroFeederThread?.Stop();
             gyroFeederThread = gyroResdStream.StartSampleFeedThread(this,
                 DataRateToFrequency(gyroscopeFifoBatchingDataRateSelection.Value),
-                (sample, ts, status) =>
-                {
-                    switch(status)
-                    {
-                        case RESDStreamStatus.BeforeStream:
-                            commonFifo.FeedAngularRateSample(DefaultAngularRateX, DefaultAngularRateY, DefaultAngularRateZ);
-                            break;
-                        case RESDStreamStatus.AfterStream:
-                            gyroFeederThread.Stop();
-                            gyroFeederThread = CreateAngularRateDefaultSampleFeeder();
-                            break;
-                        case RESDStreamStatus.OK:
-                            commonFifo.FeedAngularRateSample(
-                                RadiansToDegrees * (decimal)sample.AngularRateX / 1e5m,
-                                RadiansToDegrees * (decimal)sample.AngularRateY / 1e5m,
-                                RadiansToDegrees * (decimal)sample.AngularRateZ / 1e5m);
-                            break;
-                    }
-                },
-                startTime, sampleOffsetTime
+                startTime: startTime
             );
         }
 
@@ -424,6 +389,65 @@ namespace Antmicro.Renode.Peripherals.Sensors
                 .WithWriteCallback((_, __) => UpdateInterrupts())
                 ;
         }
+
+        [OnRESDSample(SampleType.Acceleration)]
+        [BeforeRESDSample(SampleType.Acceleration)]
+        private void HandleAccelerationSample(AccelerationSample sample, TimeInterval timestamp)
+        {
+            if(sample != null)
+            {
+                commonFifo.FeedAccelerationSample(
+                    (decimal)sample.AccelerationX / 1e6m,
+                    (decimal)sample.AccelerationY / 1e6m,
+                    (decimal)sample.AccelerationZ / 1e6m
+                );
+            }
+            else
+            {
+                commonFifo.FeedAccelerationSample(
+                    DefaultAccelerationX,
+                    DefaultAccelerationY,
+                    DefaultAccelerationZ
+                );
+            }
+        }
+
+        [AfterRESDSample(SampleType.Acceleration)]
+        private void HandleAccelerationSampleEnded(AccelerationSample sample, TimeInterval timestamp)
+        {
+            accelerometerFeederThread?.Stop();
+            accelerometerFeederThread = CreateAccelerationDefaultSampleFeeder();
+        }
+
+        [OnRESDSample(SampleType.AngularRate)]
+        [BeforeRESDSample(SampleType.AngularRate)]
+        private void HandleAngularRateSample(AngularRateSample sample, TimeInterval timestamp)
+        {
+            if(sample != null)
+            {
+                commonFifo.FeedAngularRateSample(
+                    RadiansToDegrees * (decimal)sample.AngularRateX / 1e5m,
+                    RadiansToDegrees * (decimal)sample.AngularRateY / 1e5m,
+                    RadiansToDegrees * (decimal)sample.AngularRateZ / 1e5m
+                );
+            }
+            else
+            {
+                commonFifo.FeedAngularRateSample(
+                    DefaultAngularRateX,
+                    DefaultAngularRateY,
+                    DefaultAngularRateZ
+                );
+            }
+        }
+
+        [AfterRESDSample(SampleType.AngularRate)]
+        private void HandleAngularRateSampleEnded(AngularRateSample sample, TimeInterval timestamp)
+        {
+            gyroFeederThread.Stop();
+            gyroFeederThread = CreateAngularRateDefaultSampleFeeder();
+        }
+
 
         private short GetAccelerationFullScaleValue()
         {
