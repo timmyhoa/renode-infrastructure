@@ -34,7 +34,7 @@ namespace Antmicro.Renode.Peripherals.Sensors
 
         public void FeedAccelerationSample(decimal x, decimal y, decimal z, uint repeat = 1)
         {
-            for(var i = 0; i < repeat; i++)
+            for (var i = 0; i < repeat; i++)
             {
                 commonFifo.FeedAccelerationSample(x, y, z);
             }
@@ -53,7 +53,7 @@ namespace Antmicro.Renode.Peripherals.Sensors
 
         public void FeedAngularRateSample(decimal x, decimal y, decimal z, uint repeat = 1)
         {
-            for(var i = 0; i < repeat; i++)
+            for (var i = 0; i < repeat; i++)
             {
                 commonFifo.FeedAngularRateSample(x, y, z);
             }
@@ -98,16 +98,16 @@ namespace Antmicro.Renode.Peripherals.Sensors
             temperatureResdStream?.Dispose();
             temperatureResdStream = null;
         }
-        
+
         public void Write(byte[] data)
         {
             this.Log(LogLevel.Noisy, "Written {0} bytes: {1}", data.Length, Misc.PrettyPrintCollectionHex(data));
-            foreach(var b in data)
+            foreach (var b in data)
             {
                 WriteByte(b);
             }
         }
-        
+
         public void WriteByte(byte b)
         {
             switch (state)
@@ -117,24 +117,24 @@ namespace Antmicro.Renode.Peripherals.Sensors
                     this.Log(LogLevel.Noisy, "Setting register address to {0} (0x{0:X})", (Registers)address);
                     state = State.Processing;
                     break;
-                    
+
                 case State.Processing:
                     this.Log(LogLevel.Noisy, "Writing value 0x{0:X} to register {1} (0x{1:X})", b, (Registers)address);
                     RegistersCollection.Write(address, b);
                     TryIncrementAddress();
                     break;
-                
+
                 default:
                     throw new ArgumentException($"Unexpected state: {state}");
             }
         }
-        
-        public byte[] Read(int count = 1) 
+
+        public byte[] Read(int count = 1)
         {
             var ret = RegistersCollection.Read(address);
             this.NoisyLog("Reading register {1} (0x{1:X}) from device: 0x{0:X}", ret, (Registers)address);
             TryIncrementAddress();
-            return new byte [] {ret};
+            return new byte[] { ret };
         }
 
         public bool FifoOverrunStatus => commonFifo.OverrunOccurred;
@@ -145,20 +145,20 @@ namespace Antmicro.Renode.Peripherals.Sensors
         public bool IsGyroscopePoweredOn => IsDataRateEnabledAndDefined(gyroscopeOutputDataRateSelection.Value, isGyroscopeOutputDataRate: true);
         public GPIO Interrupt1 { get; }
 
-        public decimal DefaultAccelerationX 
-        { 
+        public decimal DefaultAccelerationX
+        {
             get => defaultAccelerationX;
             set => defaultAccelerationX = value;
         }
 
-        public decimal DefaultAccelerationY 
-        { 
+        public decimal DefaultAccelerationY
+        {
             get => defaultAccelerationY;
             set => defaultAccelerationY = value;
         }
 
-        public decimal DefaultAccelerationZ 
-        { 
+        public decimal DefaultAccelerationZ
+        {
             get => defaultAccelerationZ;
             set => defaultAccelerationZ = value;
         }
@@ -208,7 +208,7 @@ namespace Antmicro.Renode.Peripherals.Sensors
                     valueProviderCallback: _ =>
                     {
                         var sample = sampleProvider();
-                        if(sample == null)
+                        if (sample == null)
                         {
                             return 0u;
                         }
@@ -218,7 +218,7 @@ namespace Antmicro.Renode.Peripherals.Sensors
                         var _byte = sample.GetScaledValueByte(registerInfo.Axis, sensitivity, registerInfo.UpperByte, out var realScaledValue);
 
                         // Log only when reading the lower byte to avoid logging it twice for each value.
-                        if(realScaledValue.HasValue && !registerInfo.UpperByte)
+                        if (realScaledValue.HasValue && !registerInfo.UpperByte)
                         {
                             var fullScaleSelection = sample.IsAccelerationSample ? $"{GetAccelerationFullScaleValue()}G" : $"{GetAngularRateFullScaleValue()}DPS";
                             this.Log(LogLevel.Debug, "Invalid value for the current full scale selection ({0}): {1}", fullScaleSelection, realScaledValue.Value);
@@ -260,7 +260,7 @@ namespace Antmicro.Renode.Peripherals.Sensors
                 ;
 
             Registers.Control3.Define(this, resetValue: 0b00000100)
-                .WithFlag(0, FieldMode.WriteOneToClear, name: "SW_RESET", changeCallback: (_, newValue) => { if(newValue) SoftwareReset(); })
+                .WithFlag(0, FieldMode.WriteOneToClear, name: "SW_RESET", changeCallback: (_, newValue) => { if (newValue) SoftwareReset(); })
                 .WithReservedBits(1, 1)
                 .WithFlag(2, out addressAutoIncrement, name: "IF_INC")
                 .WithTaggedFlag("SIM", 3)
@@ -279,14 +279,14 @@ namespace Antmicro.Renode.Peripherals.Sensors
                 .WithTaggedFlag("HP_REF_MODE_XL", 4)
                 .WithTag("HPCF_XL", 5, 3)
                 ;
-            
+
             Registers.Status.Define(this)
                 .WithValueField(2, 1, FieldMode.Read, valueProviderCallback: _ => 0x1, name: "TDA")
                 .WithValueField(1, 1, FieldMode.Read, valueProviderCallback: _ => 0x1, name: "GDA")
                 .WithValueField(0, 1, FieldMode.Read, valueProviderCallback: _ => 0x1, name: "XLDA")
                 .WithValueField(3, 5, FieldMode.Read)
                 ;
-            
+
             Registers.TemperatureLow.Define(this)
                 .WithValueField(0, 8, FieldMode.Read, name: "OUT_TEMP_L", valueProviderCallback: _ =>
                 {
@@ -341,7 +341,7 @@ namespace Antmicro.Renode.Peripherals.Sensors
                     changeCallback: (_, __) =>
                     {
                         UpdateAccelerationSampleFrequency();
-                        if(accelerometerFifoBatchingDataRateSelection.Value != DataRates.Disabled && accelerometerFeederThread == null)
+                        if (accelerometerFifoBatchingDataRateSelection.Value != DataRates.Disabled && accelerometerFeederThread == null)
                         {
                             accelerometerFeederThread = CreateAccelerationDefaultSampleFeeder();
                         }
@@ -351,7 +351,7 @@ namespace Antmicro.Renode.Peripherals.Sensors
                     changeCallback: (_, __) =>
                     {
                         UpdateAngularRateSampleFrequency();
-                        if(gyroscopeFifoBatchingDataRateSelection.Value != DataRates.Disabled && gyroFeederThread == null)
+                        if (gyroscopeFifoBatchingDataRateSelection.Value != DataRates.Disabled && gyroFeederThread == null)
                         {
                             gyroFeederThread = CreateAngularRateDefaultSampleFeeder();
                         }
@@ -394,7 +394,7 @@ namespace Antmicro.Renode.Peripherals.Sensors
         [BeforeRESDSample(SampleType.Acceleration)]
         private void HandleAccelerationSample(AccelerationSample sample, TimeInterval timestamp)
         {
-            if(sample != null)
+            if (sample != null)
             {
                 commonFifo.FeedAccelerationSample(
                     (decimal)sample.AccelerationX / 1e6m,
@@ -423,7 +423,7 @@ namespace Antmicro.Renode.Peripherals.Sensors
         [BeforeRESDSample(SampleType.AngularRate)]
         private void HandleAngularRateSample(AngularRateSample sample, TimeInterval timestamp)
         {
-            if(sample != null)
+            if (sample != null)
             {
                 commonFifo.FeedAngularRateSample(
                     RadiansToDegrees * (decimal)sample.AngularRateX / 1e5m,
@@ -451,7 +451,7 @@ namespace Antmicro.Renode.Peripherals.Sensors
 
         private short GetAccelerationFullScaleValue()
         {
-            switch(accelerationFullScaleSelection.Value)
+            switch (accelerationFullScaleSelection.Value)
             {
                 case AccelerationFullScaleSelection.Mode0_2G:
                     return 2;
@@ -471,7 +471,7 @@ namespace Antmicro.Renode.Peripherals.Sensors
         private decimal GetAngularRateSensitivityInMilliDPSPerLSB()
         {
             var fullScaleValue = GetAngularRateFullScaleValue();
-            switch(fullScaleValue)
+            switch (fullScaleValue)
             {
                 case 125:
                     return 4.375m;
@@ -490,12 +490,12 @@ namespace Antmicro.Renode.Peripherals.Sensors
 
         private short GetAngularRateFullScaleValue()
         {
-            if(angularRate125DPSSelection.Value)
+            if (angularRate125DPSSelection.Value)
             {
                 return 125;
             }
 
-            switch(angularRateFullScaleSelection.Value)
+            switch (angularRateFullScaleSelection.Value)
             {
                 case AngularRateFullScaleSelection.Mode0_250DPS:
                     return 250;
@@ -521,7 +521,7 @@ namespace Antmicro.Renode.Peripherals.Sensors
         private bool IsDataRateEnabledAndDefined(DataRates value, bool isGyroscopeOutputDataRate = false)
         {
             var enabled = value != DataRates.Disabled && Enum.IsDefined(typeof(DataRates), value);
-            if(isGyroscopeOutputDataRate && enabled)
+            if (isGyroscopeOutputDataRate && enabled)
             {
                 // This specific selection is invalid for the Gyroscope's Output Data Rate.
                 enabled = value != DataRates._1_6HzOr6_5HzOr12_5Hz;
@@ -546,18 +546,18 @@ namespace Antmicro.Renode.Peripherals.Sensors
 
         private bool TryUpdateCurrentTemperatureSample()
         {
-            if(temperatureResdStream == null)
+            if (temperatureResdStream == null)
             {
                 return false;
             }
 
-            if(machine.SystemBus.TryGetCurrentCPU(out var cpu))
+            if (machine.SystemBus.TryGetCurrentCPU(out var cpu))
             {
                 cpu.SyncTime();
             }
 
             var currentTimestamp = machine.ClockSource.CurrentValue.TotalMicroseconds * 1000;
-            if(temperatureResdStream.TryGetSample(currentTimestamp, out var sample) == RESDStreamStatus.OK)
+            if (temperatureResdStream.TryGetSample(currentTimestamp, out var sample) == RESDStreamStatus.OK)
             {
                 Temperature = (decimal)sample.Temperature / 1e3m;
             }
@@ -568,13 +568,13 @@ namespace Antmicro.Renode.Peripherals.Sensors
         private void TryIncrementAddress()
         {
             // automatic rounding when accessing FIFO registers
-            if(address == (byte)Registers.FifoOutputZHigh)
+            if (address == (byte)Registers.FifoOutputZHigh)
             {
                 address = (byte)Registers.FifoOutputTag;
                 return;
             }
 
-            if(!addressAutoIncrement.Value)
+            if (!addressAutoIncrement.Value)
             {
                 return;
             }
@@ -598,12 +598,12 @@ namespace Antmicro.Renode.Peripherals.Sensors
         private void UpdateInterrupts()
         {
             var newInt1Status = false;
-            if(interrupt1EnableFifoOverrun.Value && FifoOverrunStatus)
+            if (interrupt1EnableFifoOverrun.Value && FifoOverrunStatus)
             {
                 newInt1Status = true;
             }
 
-            if(Interrupt1.IsSet != newInt1Status)
+            if (Interrupt1.IsSet != newInt1Status)
             {
                 this.Log(LogLevel.Debug, "New INT1 state: {0}", newInt1Status ? "set" : "reset");
                 Interrupt1.Set(newInt1Status);
@@ -612,7 +612,7 @@ namespace Antmicro.Renode.Peripherals.Sensors
 
         private uint DataRateToFrequency(DataRates dr)
         {
-            switch(dr)
+            switch (dr)
             {
                 // here we select the middle value, rounded down as currently we don't support fractions of Hz when declaring frequencies
                 case DataRates._1_6HzOr6_5HzOr12_5Hz:
@@ -710,18 +710,18 @@ namespace Antmicro.Renode.Peripherals.Sensors
 
             public void FeedSample(LSM6DSO_Vector3DSample sample)
             {
-                lock(locker)
+                lock (locker)
                 {
-                    if(Mode == FifoModes.Bypass)
+                    if (Mode == FifoModes.Bypass)
                     {
                         // In bypass mode don't add samples to queue, just keep like the latest sample.
                         KeepSample(sample);
                         return;
                     }
 
-                    if(Mode == FifoModes.Continuous && Full)
+                    if (Mode == FifoModes.Continuous && Full)
                     {
-                        if(!OverrunOccurred)
+                        if (!OverrunOccurred)
                         {
                             owner.Log(LogLevel.Debug, $"{name}: Overrun");
                             OverrunOccurred = true;
@@ -749,9 +749,9 @@ namespace Antmicro.Renode.Peripherals.Sensors
 
             public bool TryDequeueNewSample()
             {
-                lock(locker)
+                lock (locker)
                 {
-                    if(CheckEnabled() && queue.TryDequeue(out var sample))
+                    if (CheckEnabled() && queue.TryDequeue(out var sample))
                     {
                         owner.Log(LogLevel.Noisy, "New sample dequeued: {0}", sample);
                         KeepSample(sample);
@@ -774,7 +774,7 @@ namespace Antmicro.Renode.Peripherals.Sensors
                 get => mode;
                 set
                 {
-                    if(value == FifoModes.Bypass)
+                    if (value == FifoModes.Bypass)
                     {
                         Reset();
                     }
@@ -793,7 +793,7 @@ namespace Antmicro.Renode.Peripherals.Sensors
 
             private bool CheckEnabled()
             {
-                if(Disabled)
+                if (Disabled)
                 {
                     owner.Log(LogLevel.Debug, "Sample unavailable -- FIFO disabled.");
                     return false;
@@ -804,7 +804,7 @@ namespace Antmicro.Renode.Peripherals.Sensors
             private LSM6DSO_Vector3DSample GetSample(FifoTag tag)
             {
                 LSM6DSO_Vector3DSample sample;
-                switch(tag)
+                switch (tag)
                 {
                     case DefaultAccelerometerTag:
                         sample = accelerationSample;
@@ -816,7 +816,7 @@ namespace Antmicro.Renode.Peripherals.Sensors
                         throw new ArgumentException($"Tried to get sample for an unsupported tag: {tag}");
                 }
 
-                if(sample == null)
+                if (sample == null)
                 {
                     owner.Log(LogLevel.Warning, "{0}: No sample found with {1} tag", name, tag);
                 }
@@ -826,11 +826,11 @@ namespace Antmicro.Renode.Peripherals.Sensors
             private void KeepSample(LSM6DSO_Vector3DSample sample)
             {
                 latestSample = sample;
-                if(sample.IsAccelerationSample)
+                if (sample.IsAccelerationSample)
                 {
                     accelerationSample = sample;
                 }
-                else if(sample.IsAngularRateSample)
+                else if (sample.IsAngularRateSample)
                 {
                     angularRateSample = sample;
                 }
@@ -870,7 +870,7 @@ namespace Antmicro.Renode.Peripherals.Sensors
 
             public decimal GetAxisValue(Axes axis)
             {
-                switch(axis)
+                switch (axis)
                 {
                     case Axes.X:
                         return X;
@@ -889,12 +889,12 @@ namespace Antmicro.Renode.Peripherals.Sensors
                 var unscaledValue = GetAxisValue(axis);
                 var scaledValue = (long)decimal.Round(unscaledValue * sensitivity, 0);
                 short value;
-                if(scaledValue > short.MaxValue)
+                if (scaledValue > short.MaxValue)
                 {
                     realScaledValue = scaledValue;
                     value = short.MaxValue;
                 }
-                else if(scaledValue < short.MinValue)
+                else if (scaledValue < short.MinValue)
                 {
                     realScaledValue = scaledValue;
                     value = short.MinValue;
@@ -927,7 +927,7 @@ namespace Antmicro.Renode.Peripherals.Sensors
                 private set
                 {
                     tag = value;
-                    switch(tag)
+                    switch (tag)
                     {
                         case FifoTag.Accelerometer2xC:
                         case FifoTag.Accelerometer3xC:
@@ -959,7 +959,7 @@ namespace Antmicro.Renode.Peripherals.Sensors
 
         private IManagedThread CreateAccelerationDefaultSampleFeeder()
         {
-            if(accelerometerFifoBatchingDataRateSelection.Value == DataRates.Disabled)
+            if (accelerometerFifoBatchingDataRateSelection.Value == DataRates.Disabled)
             {
                 return null;
             }
@@ -972,7 +972,7 @@ namespace Antmicro.Renode.Peripherals.Sensors
 
         private IManagedThread CreateAngularRateDefaultSampleFeeder()
         {
-            if(gyroscopeFifoBatchingDataRateSelection.Value == DataRates.Disabled)
+            if (gyroscopeFifoBatchingDataRateSelection.Value == DataRates.Disabled)
             {
                 return null;
             }
@@ -994,12 +994,12 @@ namespace Antmicro.Renode.Peripherals.Sensors
 
         private void UpdateAccelerationSampleFrequency()
         {
-            if(accelerometerFeederThread == null)
+            if (accelerometerFeederThread == null)
             {
                 return;
             }
 
-            if(accelerometerFifoBatchingDataRateSelection.Value != DataRates.Disabled)
+            if (accelerometerFifoBatchingDataRateSelection.Value != DataRates.Disabled)
             {
                 var freq = DataRateToFrequency(accelerometerFifoBatchingDataRateSelection.Value);
                 accelerometerFeederThread.Frequency = freq;
@@ -1013,12 +1013,12 @@ namespace Antmicro.Renode.Peripherals.Sensors
 
         private void UpdateAngularRateSampleFrequency()
         {
-            if(gyroFeederThread == null)
+            if (gyroFeederThread == null)
             {
                 return;
             }
 
-            if(gyroscopeFifoBatchingDataRateSelection.Value != DataRates.Disabled)
+            if (gyroscopeFifoBatchingDataRateSelection.Value != DataRates.Disabled)
             {
                 var freq = DataRateToFrequency(gyroscopeFifoBatchingDataRateSelection.Value);
                 gyroFeederThread.Frequency = freq;
@@ -1067,7 +1067,7 @@ namespace Antmicro.Renode.Peripherals.Sensors
             Read = 1,
             None,
         }
-        
+
         private enum State
         {
             Idle,

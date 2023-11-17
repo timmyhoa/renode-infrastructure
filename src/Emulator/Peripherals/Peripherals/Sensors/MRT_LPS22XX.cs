@@ -14,8 +14,14 @@ namespace Antmicro.Renode.Peripherals.Sensors
                 .WithTaggedFlag("BDU", 1)
                 .WithTaggedFlag("SIM", 0);
             Registers.Control2.Define(this, 0b0001000);
-
+            Registers.Status.Define(this, 0b00000011);
+            Registers.PressureLow.Define(this)
+                .WithValueField(0, 8, FieldMode.Read, valueProviderCallback: _ => GetScaledValue(Pressure, PressureScale, false));
         }
+
+        private const short PressureScale = 4096;
+        private const short TemperatureScale = 100;
+        public decimal Pressure { get; set; }
 
         IEnumRegisterField<DataRates> OutputRate;
         private enum DataRates
