@@ -1,0 +1,67 @@
+using Antmicro.Renode.Core.Structure.Registers;
+
+namespace Antmicro.Renode.Peripherals.Sensors
+{
+    public class MRT_LPS22XX : ST_I2CSensorBase<MRT_LPS22XX.Registers>
+    {
+        protected override void DefineRegisters()
+        {
+            Registers.WhoAmI.Define(this, 0b10110011);
+            Registers.Control1.Define(this)
+                .WithEnumField(4, 3, out OutputRate, name: "ODR")
+                .WithTaggedFlag("EN_LPFP", 3)
+                .WithTaggedFlag("LPFP_CFG", 2)
+                .WithTaggedFlag("BDU", 1)
+                .WithTaggedFlag("SIM", 0);
+            Registers.Control2.Define(this, 0b0001000);
+
+        }
+
+        IEnumRegisterField<DataRates> OutputRate;
+        private enum DataRates
+        {
+            OneShot = 0x0,
+            _1HZ = 0x1,
+            _10HZ = 0x2,
+            _25HZ = 0x3,
+            _50HZ = 0x4,
+            _75HZ = 0x5,
+            _100HZ = 0x6,
+            _200HZ = 0x7,
+        }
+
+        public enum Registers
+        {
+            // 00-0A Reserved
+            InterruptConfig = 0x0B,
+            PressureThresholdLow = 0x0C,
+            PressureThresholdHigh = 0x0D,
+            InterfaceControl = 0x0E,
+            WhoAmI = 0x0F,
+            Control1 = 0x10,
+            Control2 = 0x11,
+            Control3 = 0x12,
+            FifoControl = 0x13,
+            FifoWatermark = 0x14,
+            PressureReferenceLow = 0x15,
+            PressureReferenceHigh = 0x16,
+            // 0x17 Reserved
+            PressureOffsetLow = 0x18,
+            PressureOffsetHigh = 0x19,
+            // 1A - 23 Reserved
+            Interrupt = 0x24,
+            FifoStatus1 = 0x25,
+            FifoStatus2 = 0x26,
+            Status = 0x27,
+            PressureLow = 0x28,
+            PressureMid = 0x29,
+            PressureHigh = 0x2A,
+            TempLow = 0x2B,
+            TempHigh = 0x2C,
+            // 2D - 77 Reserved
+            FifoDataPressureLow = 0x78,
+            FifoDataPressureMid = 0x79,
+            FifoDataPressureHigh = 0x7A,
+        }
+    }
+}
