@@ -272,6 +272,7 @@
     <Compile Include="Peripherals\SPI\Quark_SPI.cs" />
     <Compile Include="Peripherals\Network\ENC28J60.cs" />
     <Compile Include="Peripherals\Sensors\MC3635.cs" />
+    <Compile Include="Peripherals\Sensors\MRT_LPS22XX.cs" />
     <Compile Include="Peripherals\Sensors\TI_LM74.cs" />
     <Compile Include="Peripherals\GPIOPort\Quark_GPIOController.cs" />
     <Compile Include="Peripherals\GPIOPort\Quark_PWM.cs" />

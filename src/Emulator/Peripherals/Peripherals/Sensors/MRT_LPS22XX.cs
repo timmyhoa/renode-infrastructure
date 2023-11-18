@@ -1,9 +1,21 @@
+using System;
+using System.Threading;
 using Antmicro.Renode.Core.Structure.Registers;
+using Antmicro.Renode.Logging;
 
 namespace Antmicro.Renode.Peripherals.Sensors
 {
     public class MRT_LPS22XX : ST_I2CSensorBase<MRT_LPS22XX.Registers>
     {
+        public MRT_LPS22XX()
+        {
+            Reset();
+        }
+
+        private void TryIncrementAddress()
+        {
+        }
+
         protected override void DefineRegisters()
         {
             Registers.WhoAmI.Define(this, 0b10110011);
@@ -16,7 +28,44 @@ namespace Antmicro.Renode.Peripherals.Sensors
             Registers.Control2.Define(this, 0b0001000);
             Registers.Status.Define(this, 0b00000011);
             Registers.PressureLow.Define(this)
-                .WithValueField(0, 8, FieldMode.Read, valueProviderCallback: _ => GetScaledValue(Pressure, PressureScale, false));
+                .WithValueField(0, 8, FieldMode.Read, valueProviderCallback: _ => GetScaledPressureValue(Part.Low));
+            Registers.PressureMid.Define(this)
+                .WithValueField(0, 8, valueProviderCallback: _ => GetScaledPressureValue(Part.Middle));
+            Registers.PressureHigh.Define(this)
+                .WithValueField(0, 8, valueProviderCallback: _ =>
+                GetScaledPressureValue(Part.Upper));
+        }
+
+        private byte GetScaledPressureValue(Part part)
+        {
+            var v = (int)Pressure * PressureScale;
+            this.NoisyLog("Scaled value is {0}", v);
+            switch (part)
+            {
+                case Part.Low:
+                    {
+                        return (byte)v;
+                    }
+                case Part.Middle:
+                    {
+                        return (byte)(v >> 8);
+                    }
+                case Part.Upper:
+                    {
+                        return (byte)(v >> 16);
+                    }
+                default:
+                    {
+                        throw new ArgumentException("Unexpected part");
+                    }
+            }
+        }
+
+        private enum Part
+        {
+            Low,
+            Middle,
+            Upper,
         }
 
         private const short PressureScale = 4096;
