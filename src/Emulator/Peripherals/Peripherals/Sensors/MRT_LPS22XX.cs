@@ -5,15 +5,16 @@ using Antmicro.Renode.Logging;
 
 namespace Antmicro.Renode.Peripherals.Sensors
 {
-    public class MRT_LPS22XX : ST_I2CSensorBase<MRT_LPS22XX.Registers>
+    public class MRT_LPS22XX : MRT_ST_I2CSensorBase<MRT_LPS22XX.Registers>
     {
         public MRT_LPS22XX()
         {
             Reset();
         }
 
-        private void TryIncrementAddress()
+        protected override void TryIncrementAddress()
         {
+            address = (address + 1) % 0x7B;
         }
 
         protected override void DefineRegisters()
@@ -34,6 +35,10 @@ namespace Antmicro.Renode.Peripherals.Sensors
             Registers.PressureHigh.Define(this)
                 .WithValueField(0, 8, valueProviderCallback: _ =>
                 GetScaledPressureValue(Part.Upper));
+            Registers.TempHigh.Define(this)
+                .WithValueField(0, 8, valueProviderCallback: _ => GetScaledValue(Temperature, TemperatureScale, true));
+            Registers.TempLow.Define(this)
+                .WithValueField(0, 8, valueProviderCallback: _ => GetScaledValue(Temperature, TemperatureScale, false));
         }
 
         private byte GetScaledPressureValue(Part part)
@@ -61,6 +66,7 @@ namespace Antmicro.Renode.Peripherals.Sensors
             }
         }
 
+
         private enum Part
         {
             Low,
@@ -71,6 +77,7 @@ namespace Antmicro.Renode.Peripherals.Sensors
         private const short PressureScale = 4096;
         private const short TemperatureScale = 100;
         public decimal Pressure { get; set; }
+        public decimal Temperature { get; set; }
 
         IEnumRegisterField<DataRates> OutputRate;
         private enum DataRates
