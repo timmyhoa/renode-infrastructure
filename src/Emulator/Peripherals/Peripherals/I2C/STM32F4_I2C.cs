@@ -99,8 +99,12 @@ namespace Antmicro.Renode.Peripherals.I2C
 
         private void CreateRegisters()
         {
-            var control1 = new DoubleWordRegister(this).WithFlag(15, writeCallback: SoftwareResetWrite, name:"SWRST").WithFlag(9, FieldMode.Read, name:"StopGen", writeCallback: StopWrite)
-                .WithFlag(8, FieldMode.Read, writeCallback: StartWrite, name:"StartGen").WithFlag(0, writeCallback: PeripheralEnableWrite, name:"PeriEn");
+            var control1 = new DoubleWordRegister(this)
+                .WithFlag(15, writeCallback: SoftwareResetWrite, name: "SWRST")
+                .WithFlag(11, out twoByteTransfer, name: "POS")
+                .WithFlag(9, FieldMode.Read, name: "StopGen", writeCallback: StopWrite)
+                .WithFlag(8, FieldMode.Read, writeCallback: StartWrite, name: "StartGen")
+                .WithFlag(0, writeCallback: PeripheralEnableWrite, name: "PeriEn");
             var control2 = new DoubleWordRegister(this).WithValueField(0, 6, name:"Freq");
             var status1 = new DoubleWordRegister(this);
             var status2 = new DoubleWordRegister(this);
@@ -112,8 +116,9 @@ namespace Antmicro.Renode.Peripherals.I2C
                 if (!masterSlave.Value || !willReadOnSelectedSlave){
                     return;
                 }
-                
-                if (acknowledgeEnable.Value) {
+
+                if (acknowledgeEnable.Value || twoByteTransfer.Value)
+                {
                     dataToReceive.Enqueue(selectedSlave.Read()[0]);
                 }
                 dataToReceive.Enqueue(selectedSlave.Read()[0]);
@@ -126,7 +131,7 @@ namespace Antmicro.Renode.Peripherals.I2C
                 if (newVal) {
                     ackStatus = ACKStatus.Enabled;
                     return;
-                } 
+                }
                 ackStatus = ACKStatus.DisableNextRead;
             });
 
@@ -186,7 +191,7 @@ namespace Antmicro.Renode.Peripherals.I2C
                 if (!stopped && ackStatus != ACKStatus.Disabled){
                     if (ackStatus == ACKStatus.DisableNextRead) {
                         ackStatus = ACKStatus.Disabled;
-                    } 
+                    }
                     dataToReceive.Enqueue(selectedSlave.Read()[0]);
                 }
             }
@@ -354,6 +359,7 @@ namespace Antmicro.Renode.Peripherals.I2C
         private readonly Queue<byte> dataToReceive = new Queue<byte> {};
         private bool willReadOnSelectedSlave;
         private II2CPeripheral selectedSlave;
+        private IFlagRegisterField twoByteTransfer;
 
         private enum Registers
         {

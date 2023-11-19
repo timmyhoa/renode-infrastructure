@@ -43,8 +43,7 @@ namespace Antmicro.Renode.Peripherals.Sensors
 
         private byte GetScaledPressureValue(Part part)
         {
-            var v = (int)Pressure * PressureScale;
-            this.NoisyLog("Scaled value is {0}", v);
+            var v = (int)(Pressure * PressureScale);
             switch (part)
             {
                 case Part.Low:
